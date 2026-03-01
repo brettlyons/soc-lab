@@ -274,8 +274,8 @@ ssh labadmin@192.168.10.10
 sudo apt update && sudo apt upgrade -y
 
 # Download installer and config
-curl -sO https://packages.wazuh.com/4.x/wazuh-install.sh
-curl -sO https://packages.wazuh.com/4.x/config.yml
+curl -sO https://packages.wazuh.com/4.14/wazuh-install.sh
+
 
 # Edit config.yml — single-node: all IPs set to 127.0.0.1
 # nodes.wazuh_indexer[0].ip  = 127.0.0.1
