@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+
+    <!-- Windows PE - Install phase -->
+    <settings pass="windowsPE">
+        <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+            <SetupUILanguage>
+                <UILanguage>en-US</UILanguage>
+            </SetupUILanguage>
+            <InputLocale>en-US</InputLocale>
+            <SystemLocale>en-US</SystemLocale>
+            <UILanguage>en-US</UILanguage>
+            <UserLocale>en-US</UserLocale>
+        </component>
+
+        <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+            <!-- Use generic Windows 11 Pro key (won't activate, just selects edition) -->
+            <UserData>
+                <ProductKey>
+                    <Key>W269N-WFGWX-YVC9B-4J6C9-T83GX</Key>
+                    <WillShowUI>OnError</WillShowUI>
+                </ProductKey>
+                <AcceptEula>true</AcceptEula>
+            </UserData>
+
+            <!-- Auto-select Windows 11 Pro -->
+            <ImageInstall>
+                <OSImage>
+                    <InstallFrom>
+                        <MetaData wcm:action="add">
+                            <Key>/IMAGE/NAME</Key>
+                            <Value>Windows 11 Pro</Value>
+                        </MetaData>
+                    </InstallFrom>
+                    <InstallTo>
+                        <DiskID>0</DiskID>
+                        <PartitionID>3</PartitionID>
+                    </InstallTo>
+                </OSImage>
+            </ImageInstall>
+
+            <!-- Auto-partition disk (GPT/UEFI) -->
+            <DiskConfiguration>
+                <Disk wcm:action="add">
+                    <DiskID>0</DiskID>
+                    <WillWipeDisk>true</WillWipeDisk>
+                    <CreatePartitions>
+                        <!-- EFI System Partition -->
+                        <CreatePartition wcm:action="add">
+                            <Order>1</Order>
+                            <Size>300</Size>
+                            <Type>EFI</Type>
+                        </CreatePartition>
+                        <!-- MSR Partition -->
+                        <CreatePartition wcm:action="add">
+                            <Order>2</Order>
+                            <Size>16</Size>
+                            <Type>MSR</Type>
+                        </CreatePartition>
+                        <!-- Windows Partition -->
+                        <CreatePartition wcm:action="add">
+                            <Order>3</Order>
+                            <Extend>true</Extend>
+                            <Type>Primary</Type>
+                        </CreatePartition>
+                    </CreatePartitions>
+                    <ModifyPartitions>
+                        <ModifyPartition wcm:action="add">
+                            <Order>1</Order>
+                            <PartitionID>1</PartitionID>
+                            <Format>FAT32</Format>
+                            <Label>System</Label>
+                        </ModifyPartition>
+                        <ModifyPartition wcm:action="add">
+                            <Order>2</Order>
+                            <PartitionID>2</PartitionID>
+                        </ModifyPartition>
+                        <ModifyPartition wcm:action="add">
+                            <Order>3</Order>
+                            <PartitionID>3</PartitionID>
+                            <Format>NTFS</Format>
+                            <Label>Windows</Label>
+                            <Letter>C</Letter>
+                        </ModifyPartition>
+                    </ModifyPartitions>
+                </Disk>
+            </DiskConfiguration>
+
+            <!-- Load VirtIO drivers during install - try multiple drive letters since WinPE assigns dynamically -->
+            <DriverPaths>
+                <PathAndCredentials wcm:action="add" wcm:keyValue="1">
+                    <Path>D:\viostor\w11\amd64</Path>
+                </PathAndCredentials>
+                <PathAndCredentials wcm:action="add" wcm:keyValue="2">
+                    <Path>D:\NetKVM\w11\amd64</Path>
+                </PathAndCredentials>
+                <PathAndCredentials wcm:action="add" wcm:keyValue="3">
+                    <Path>E:\viostor\w11\amd64</Path>
+                </PathAndCredentials>
+                <PathAndCredentials wcm:action="add" wcm:keyValue="4">
+                    <Path>E:\NetKVM\w11\amd64</Path>
+                </PathAndCredentials>
+                <PathAndCredentials wcm:action="add" wcm:keyValue="5">
+                    <Path>F:\viostor\w11\amd64</Path>
+                </PathAndCredentials>
+                <PathAndCredentials wcm:action="add" wcm:keyValue="6">
+                    <Path>F:\NetKVM\w11\amd64</Path>
+                </PathAndCredentials>
+            </DriverPaths>
+        </component>
+    </settings>
+
+    <!-- Specialize - Machine-specific config -->
+    <settings pass="specialize">
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+            <!-- Auto-generate computer name -->
+            <ComputerName>*</ComputerName>
+            <TimeZone>Mountain Standard Time</TimeZone>
+        </component>
+    </settings>
+
+    <!-- OOBE - Out of Box Experience -->
+    <settings pass="oobeSystem">
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+            <OOBE>
+                <!-- Skip privacy/telemetry screens -->
+                <HideEULAPage>true</HideEULAPage>
+                <HideLocalAccountScreen>true</HideLocalAccountScreen>
+                <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+                <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+                <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+                <ProtectYourPC>3</ProtectYourPC>
+            </OOBE>
+
+            <!-- Temporary local admin for initial setup - Entra join happens via script -->
+            <UserAccounts>
+                <LocalAccounts>
+                    <LocalAccount wcm:action="add">
+                        <Name>SetupAdmin</Name>
+                        <Group>Administrators</Group>
+                        <Password>
+                            <Value>TempPass123!</Value>
+                            <PlainText>true</PlainText>
+                        </Password>
+                    </LocalAccount>
+                </LocalAccounts>
+            </UserAccounts>
+
+            <AutoLogon>
+                <Enabled>true</Enabled>
+                <Username>SetupAdmin</Username>
+                <Password>
+                    <Value>TempPass123!</Value>
+                    <PlainText>true</PlainText>
+                </Password>
+                <LogonCount>1</LogonCount>
+            </AutoLogon>
+
+            <!-- FirstLogonCommands run once as SetupAdmin -->
+            <FirstLogonCommands>
+                <!-- Install SPICE guest tools for clipboard/display integration -->
+                <SynchronousCommand wcm:action="add">
+                    <Order>1</Order>
+                    <CommandLine>powershell -Command "Get-Volume | Where-Object {$_.DriveType -eq 'CD-ROM'} | ForEach-Object { $installer = $_.DriveLetter + ':\spice-guest-tools.exe'; if (Test-Path $installer) { Start-Process $installer -ArgumentList '/S' -Wait } }"</CommandLine>
+                    <Description>Install SPICE guest tools silently</Description>
+                </SynchronousCommand>
+                <!-- Auto-launch Entra ID enrollment dialog (user enters credentials manually) -->
+                <SynchronousCommand wcm:action="add">
+                    <Order>2</Order>
+                    <CommandLine>powershell -Command "Start-Sleep -Seconds 10; Start-Process 'ms-device-enrollment:?mode=mdm'"</CommandLine>
+                    <Description>Launch Entra ID enrollment</Description>
+                </SynchronousCommand>
+            </FirstLogonCommands>
+        </component>
+
+        <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+            <InputLocale>en-US</InputLocale>
+            <SystemLocale>en-US</SystemLocale>
+            <UILanguage>en-US</UILanguage>
+            <UserLocale>en-US</UserLocale>
+        </component>
+    </settings>
+
+</unattend>
