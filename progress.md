@@ -70,6 +70,54 @@
 - [ ] Install Suricata + ET Open rules
 - [ ] Configure rsyslog → Wazuh UDP 514
 
+## Session 5: 2026-03-01 (continued)
+
+### Phase 3: fw-router — completed
+- nftables ruleset deployed and verified:
+  - NAT lab-net → WAN (masquerade on eth0)
+  - Sandbox isolation: eth2 can only reach 192.168.10.10 (Wazuh)
+  - Management SSH: `iif eth0 ip saddr 192.168.122.0/24 tcp dport 22 accept`
+  - Host → lab-net forwarding: `iif eth0 oif eth1 ip saddr 192.168.122.0/24 accept`
+- Static IPs: eth1=192.168.10.1/24, eth2=192.168.40.1/24
+- IP forwarding enabled (sysctl net.ipv4.ip_forward=1, persisted in /etc/sysctl.conf)
+- SSH key stored at `~/.ssh/fw-router-key` (moved from /tmp)
+
+### Phase 3: Detection Architecture Redesign
+- Identified: intra-subnet traffic on lab-net bypasses fw-router at L2 — never traverses nftables
+- Designed 3-tier detection architecture for Atomic Red Team tuning fidelity:
+  - Tier 1: Suricata on fw-router eth1 (perimeter NIDS — C2, exfil, north-south)
+  - Tier 2: Suricata on aurora virbr-lab bridge (internal NIDS — lateral movement, east-west)
+  - Tier 3: Sysmon+Wazuh (Windows), auditd+Wazuh (Linux) host EDR
+- Added Phase 3b (Suricata), Sysmon/auditd tasks, Phase 11 ART tuning to task_plan.md
+
+### Phase 4: Wazuh Server — completed
+- Ubuntu 24.04 VM installed via autoinstall seed ISO
+- Wazuh all-in-one (v4.14) installed and verified:
+  - wazuh-manager, wazuh-indexer, wazuh-dashboard: active
+  - Dashboard: https://192.168.10.10 — admin / (credentials in ~/wazuh-install-files.tar)
+- Aurora host route added: 192.168.10.0/24 via 192.168.122.10
+
+### Host Networking — persistent (completed)
+- fw-router WAN IP fixed: DHCP reservation MAC `52:54:00:ca:03:ea` → `192.168.122.10`
+- VM autostart enabled: fw-router, wazuh
+- NM dispatcher installed: `/etc/NetworkManager/dispatcher.d/99-soc-lab-routes`
+  - Adds 192.168.10.0/24 and 192.168.40.0/24 via 192.168.122.10 on virbr0 up
+- Scripts committed to repo: `scripts/host-setup/` (host-network-setup.sh, 99-soc-lab-routes)
+- SSH alias updated: `ssh -i ~/.ssh/fw-router-key root@192.168.122.10`
+
+### Created/Updated scripts
+- `scripts/sendkey-lib.sh` — full ASCII send-key helper (uppercase + all punctuation)
+- `scripts/fw-router/nftables.conf` — final ruleset with management SSH + host→lab-net
+- `scripts/fw-router/fw-setup.sh` — complete fw-router post-install setup
+- `scripts/host-setup/host-network-setup.sh` — idempotent host networking restore script
+- `scripts/host-setup/99-soc-lab-routes` — NM dispatcher script
+
+### Status
+- Phase 3: complete
+- Phase 4: complete (Suricata verification deferred to Phase 3b)
+- Phase 3b: pending — next up (Suricata on fw-router + aurora)
+- Phase 5 (Splunk): pending
+
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
