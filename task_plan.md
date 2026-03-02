@@ -1,7 +1,7 @@
 # Task Plan: SOC Home Lab — aurora (local VM stack)
 
 ## Goal
-Build a local SOC/Blue Team practice lab on `aurora` (Aurora OS, KVM/virt-manager) with a firewall, SIEM (Wazuh), log analysis (Splunk), Windows AD domain, attack platform (Kali), and an isolated sandbox for phone-home/malware analysis.
+Build a local SOC/Blue Team practice lab on `aurora` (Aurora OS, KVM/virt-manager) with a firewall, SIEM (Wazuh), log analysis (Splunk), Windows AD domain, attack platform (Kali), and an isolated sandbox for phone-home/malware analysis. Tuned for Atomic Red Team detection engineering across a 3-tier detection architecture.
 
 ## Host
 - **Machine:** aurora
@@ -11,8 +11,20 @@ Build a local SOC/Blue Team practice lab on `aurora` (Aurora OS, KVM/virt-manage
 - **Disk:** 930GB NVMe — ~356GB free (thin-provisioned qcow2, actual usage much less)
 - **Hypervisor:** QEMU/KVM + virt-manager (already installed)
 
+## Detection Architecture (3-Tier)
+
+| Tier | Component | Location | Catches |
+|------|-----------|----------|---------|
+| 1 — Perimeter NIDS | Suricata (ET Open rules) | fw-router, on eth1 (lab-net) | C2 callbacks, exfil, inbound scans, north-south traffic |
+| 2 — Internal NIDS | Suricata (ET Open rules) | aurora host, on virbr-lab bridge | East-west lateral movement, intra-subnet recon |
+| 3 — Host EDR | Wazuh agent + Sysmon (Win) / auditd (Linux) | Every VM | Process exec, registry, file events, credential access |
+
+> **Rationale:** Intra-subnet VM-to-VM traffic never traverses the fw-router (L2 bridge bypass).
+> Tier 2 on the hypervisor bridge catches lateral movement that Tier 1 misses — mirrors a
+> real SPAN port on a core switch. All three tiers feed Wazuh SIEM.
+
 ## Current Phase
-Phase 3 — Firewall VM (Alpine Linux + nftables, replacing OPNsense)
+Phase 3 — Firewall VM (complete) → Phase 3b: Suricata on fw-router + aurora host
 
 ## Phases
 
@@ -21,46 +33,59 @@ Phase 3 — Firewall VM (Alpine Linux + nftables, replacing OPNsense)
 - [x] Define VM stack and resource allocation
 - [x] Design segmented network topology
 - [x] Choose install methods for each VM
+- [x] Design 3-tier detection architecture (perimeter NIDS / internal NIDS / host EDR)
 - **Status:** complete
 
 ### Phase 2: Host Preparation
 - [x] Configure passwordless sudo for blyons
 - [x] Clear stale virbr0 bridge
-- [x] Create 4 libvirt virtual networks (lab-soc, lab-domain, lab-attack, lab-sandbox)
+- [x] Create libvirt virtual networks (lab-net, lab-sandbox)
 - [x] Create libvirt storage pool (soc-lab at /var/lib/libvirt/images/soc-lab/)
-- [x] Download ISOs (Ubuntu 24.04.4 ✓, OPNsense 26.1.2 downloading, Kali 2025.4 downloading, Win11 ✓)
+- [x] Download ISOs (Ubuntu 24.04.4 ✓, Kali qcow2 ✓, Alpine 3.23.3 ✓, Win11 ✓)
 - **Status:** complete
 
-### Phase 3: Firewall Router VM (Alpine Linux + nftables + Suricata)
-> **Decision:** Replaced OPNsense with Alpine Linux + nftables. Simpler, fully scriptable,
-> ~512MB RAM / 4GB disk vs 2GB / 20GB.
-> **Network redesign:** Collapsed 4 segments → 2. lab-net (flat, all VMs, full internet/NAT)
-> + lab-sandbox (isolated, no internet). Kali needs full internet for VPN to HTB/THM etc.
+### Phase 3: Firewall Router VM (Alpine Linux + nftables)
 - [x] Download Alpine Linux 3.23.3 Virtual ISO (SHA256 verified ✓)
-- [ ] Delete stale libvirt networks (lab-soc, lab-domain, lab-attack) — replace with lab-net
-- [ ] Create VM (512MB RAM, 1 vCPU, 4GB disk)
-- [ ] Attach 3 NICs: WAN (virbr0) + lab-net + lab-sandbox
-- [ ] Run alpine-setup, configure interfaces + static IPs
-- [ ] Enable IP forwarding
-- [ ] Write nftables ruleset: NAT lab-net→WAN, block sandbox→WAN, allow sandbox→Wazuh only
-- [ ] Install Suricata + configure on lab-net interface (ET Open rules)
-- [ ] Configure rsyslog → Wazuh UDP 514
-- [ ] Configure Suricata EVE JSON → Wazuh agent
-- **Status:** in_progress
+- [x] Create VM (512MB RAM, 1 vCPU, 4GB disk)
+- [x] Attach 3 NICs: WAN (virbr0) + lab-net + lab-sandbox
+- [x] Run setup-alpine, install to disk
+- [x] Configure static IPs: eth1=192.168.10.1, eth2=192.168.40.1
+- [x] Enable IP forwarding (net.ipv4.ip_forward=1)
+- [x] Write + load nftables ruleset (NAT lab-net→WAN, sandbox isolation)
+- [x] SSH key auth working (~/.ssh/fw-router-key)
+- **Status:** complete
+
+### Phase 3b: Suricata — Perimeter + Internal NIDS
+> Two Suricata instances for full 3-tier coverage.
+#### Tier 1 — Perimeter (on fw-router)
+- [ ] Install Suricata on fw-router (`apk add suricata`)
+- [ ] Configure af-packet on eth1 (lab-net facing interface)
+- [ ] Download ET Open rules
+- [ ] Configure EVE JSON output → `/var/log/suricata/eve.json`
+- [ ] Install Wazuh agent on fw-router → 192.168.10.10
+- [ ] Configure Wazuh agent localfile → eve.json
+#### Tier 2 — Internal East-West (on aurora host)
+- [ ] Install Suricata on aurora (`rpm-ostree install suricata` or container)
+- [ ] Configure af-packet on virbr-lab bridge
+- [ ] ET Open rules (shared or separate ruleset)
+- [ ] EVE JSON output → `/var/log/suricata/internal/eve.json`
+- [ ] Install Wazuh agent on aurora → 192.168.10.10
+- [ ] Configure Wazuh agent localfile → both eve.json files
+- **Status:** pending
 
 ### Phase 4: Wazuh Server
 - [x] Create Ubuntu 24.04 VM (8GB RAM, 4 vCPU, 80GB disk) — unattended via autoinstall seed ISO
-- [x] Attach NICs: lab-soc (192.168.10.10) + lab-sandbox (192.168.40.10)
+- [x] Attach NICs: lab-net (192.168.10.10) + lab-sandbox (192.168.40.10)
 - [x] Run Wazuh all-in-one installer (wazuh-install.sh -a, version 4.14)
 - [x] Verified: wazuh-manager, wazuh-indexer, wazuh-dashboard all active
 - [x] Dashboard: https://192.168.10.10 — admin / (see wazuh-install-files.tar on VM)
-- [ ] Configure syslog receiver (UDP/TCP 514)
-- [ ] Configure OPNsense syslog → Wazuh (after OPNsense VM up)
-- **Status:** complete (syslog/OPNsense config deferred to Phase 11)
+- [ ] Configure syslog receiver (UDP/TCP 514) for fw-router rsyslog
+- [ ] Verify Suricata EVE alerts appearing in dashboard (after Phase 3b)
+- **Status:** complete (syslog + Suricata verification deferred to Phase 3b)
 
 ### Phase 5: Splunk
 - [ ] Create Ubuntu 24.04 VM (8GB RAM, 4 vCPU, 80GB disk)
-- [ ] Attach NICs: lab-soc + lab-domain
+- [ ] Attach NIC: lab-net
 - [ ] Install Splunk Enterprise (free 500MB/day tier)
 - [ ] Enable receiving on port 9997
 - [ ] Verify web UI accessible on port 8000
@@ -68,81 +93,92 @@ Phase 3 — Firewall VM (Alpine Linux + nftables, replacing OPNsense)
 
 ### Phase 6: Windows Domain Controller
 - [ ] Create Windows Server 2022 VM (4GB RAM, 2 vCPU, 60GB disk)
-- [ ] Attach NIC: lab-domain
+- [ ] Attach NIC: lab-net
 - [ ] Install AD DS role, promote to DC
 - [ ] Domain: lab.local
 - [ ] Configure DNS pointing to DC
+- [ ] Install Wazuh agent → 192.168.10.10 (Tier 3 host EDR)
+- [ ] Install Sysmon with SwiftOnSecurity or Olaf config
+- [ ] Install Splunk UF → 192.168.10.40:9997
 - **Status:** pending
 
 ### Phase 7: Windows Host
 - [ ] Create Windows 10/11 VM (4GB RAM, 2 vCPU, 60GB disk)
-- [ ] Attach NIC: lab-domain
+- [ ] Attach NIC: lab-net
 - [ ] Join to lab.local domain
-- [ ] Install Wazuh agent → 192.168.10.10
+- [ ] Install Wazuh agent → 192.168.10.10 (Tier 3 host EDR)
+- [ ] Install Sysmon with SwiftOnSecurity or Olaf config
 - [ ] Install Splunk UF → 192.168.10.40:9997
+- [ ] Install Atomic Red Team (for detection tuning)
 - **Status:** pending
 
 ### Phase 8: Linux Log Sender
 - [ ] Create Ubuntu 24.04 VM (2GB RAM, 2 vCPU, 40GB disk)
-- [ ] Attach NIC: lab-domain
-- [ ] Install Wazuh agent → 192.168.10.10
+- [ ] Attach NIC: lab-net
+- [ ] Install Wazuh agent → 192.168.10.10 (Tier 3 host EDR)
+- [ ] Configure auditd with comprehensive ruleset
 - [ ] Install Splunk Universal Forwarder → 192.168.10.40:9997
 - **Status:** pending
 
 ### Phase 9: Kali Linux
-- [ ] Create Kali VM (4GB RAM, 2 vCPU, 60GB disk)
-- [ ] Attach NIC: lab-attack (+ lab-domain for attack scenarios)
-- [ ] Install Wazuh agent (optional — track attacker activity)
+- [ ] Extract Kali qcow2 from 7z archive, move to storage pool
+- [ ] Create Kali VM (4GB RAM, 2 vCPU) using existing qcow2
+- [ ] Attach NIC: lab-net
 - [ ] Verify tools available (nmap, metasploit, impacket, etc.)
+- [ ] Install Wazuh agent (optional — track attacker activity for red team log correlation)
 - **Status:** pending
 
 ### Phase 10: Sandbox / Phone-Home Host
-- [ ] Create VM (4GB RAM, 2 vCPU, 60GB disk) — OS TBD
+- [ ] Create VM (4GB RAM, 2 vCPU, 60GB disk) — OS TBD (Windows for malware, Linux for C2)
 - [ ] Attach NIC: lab-sandbox ONLY
-- [ ] OPNsense blocks all outbound internet from this segment
-- [ ] Install Wazuh agent (captures all activity for analysis)
-- [ ] Snapshot baseline before any suspect activity
+- [ ] fw-router blocks all outbound internet from sandbox segment
+- [ ] Install Wazuh agent → 192.168.40.10 (captures all activity)
+- [ ] Snapshot baseline immediately after install — revert between scenarios
 - **Status:** pending
 
 ### Phase 11: Integration & Validation
-- [ ] Confirm all agents reporting to Wazuh dashboard
+- [ ] Confirm all Wazuh agents reporting to dashboard
 - [ ] Confirm logs flowing into Splunk from all sources
-- [ ] Confirm OPNsense logs appearing in Wazuh
-- [ ] Test firewall rules (sandbox cannot reach internet)
-- [ ] Generate test events, trace through Wazuh and Splunk
+- [ ] Confirm Suricata EVE alerts (both tiers) visible in Wazuh
+- [ ] Test firewall rules (sandbox cannot reach internet, can reach Wazuh only)
+- [ ] Run Atomic Red Team subset — verify detections fire across all 3 tiers
+- [ ] Document which ART techniques hit which tier (tuning baseline)
 - [ ] Document network map and credential sheet (local only)
 - **Status:** pending
 
 ## Resource Allocation
 
-| VM            | OS                   | RAM  | vCPU | Disk  | Networks                          |
-|---------------|----------------------|------|------|-------|-----------------------------------|
-| fw-router     | Alpine Linux         | 512MB| 1    | 4GB   | WAN + all 4 lab segments          |
-| Wazuh         | Ubuntu 24.04 LTS     | 8GB  | 4    | 80GB  | lab-soc, lab-domain, lab-sandbox  |
-| Splunk        | Ubuntu 24.04 LTS     | 8GB  | 4    | 80GB  | lab-soc, lab-domain               |
-| DC01          | Windows Server 2022  | 4GB  | 2    | 60GB  | lab-domain                        |
-| Windows host  | Windows 10/11        | 4GB  | 2    | 60GB  | lab-domain                        |
-| Linux sender  | Ubuntu 24.04 LTS     | 2GB  | 2    | 40GB  | lab-domain                        |
-| Kali          | Kali Linux           | 4GB  | 2    | 60GB  | lab-attack, lab-domain            |
-| Sandbox       | TBD                  | 4GB  | 2    | 60GB  | lab-sandbox                       |
-| **Total**     |                      | **34.5GB** | **19** | **444GB** |                        |
-| Host headroom | Aurora               | ~18GB | 2+  | —     | —                                 |
+| VM            | OS                   | RAM  | vCPU | Disk  | Networks          |
+|---------------|----------------------|------|------|-------|-------------------|
+| fw-router     | Alpine Linux 3.23    | 512MB| 1    | 4GB   | WAN + lab-net + lab-sandbox |
+| Wazuh         | Ubuntu 24.04 LTS     | 8GB  | 4    | 80GB  | lab-net, lab-sandbox |
+| Splunk        | Ubuntu 24.04 LTS     | 8GB  | 4    | 80GB  | lab-net           |
+| DC01          | Windows Server 2022  | 4GB  | 2    | 60GB  | lab-net           |
+| Windows host  | Windows 10/11        | 4GB  | 2    | 60GB  | lab-net           |
+| Linux sender  | Ubuntu 24.04 LTS     | 2GB  | 2    | 40GB  | lab-net           |
+| Kali          | Kali Linux (qcow2)   | 4GB  | 2    | 60GB  | lab-net           |
+| Sandbox       | TBD                  | 4GB  | 2    | 60GB  | lab-sandbox       |
+| **Total**     |                      | **34.5GB** | **19** | **444GB** | |
+| Host headroom | Aurora               | ~18GB | 2+  | —     | —                 |
 
-> qcow2 thin provisioning: 460GB allocated, actual initial usage ~80–120GB
+> qcow2 thin provisioning: ~80–120GB actual initial usage
 
 ## Key Decisions
 
 | Decision | Rationale |
 |----------|-----------|
 | QEMU/KVM + virt-manager | Already installed, native Linux, best performance |
-| 4 isolated libvirt networks | L3 segmentation; firewall enforces inter-VLAN policy |
-| Alpine Linux + nftables firewall | Simpler, fully scriptable, ~512MB RAM vs 2GB; same segmentation/log goals as OPNsense |
+| 2 libvirt networks (lab-net + lab-sandbox) | Flat lab-net for all attack/defend VMs; Kali needs full internet for VPN to HTB/THM |
+| Alpine Linux + nftables firewall | Simpler, fully scriptable, ~512MB RAM vs 2GB |
+| 3-tier detection: perimeter NIDS + internal NIDS + host EDR | Emulates enterprise/MSSP architecture; needed for realistic ART tuning |
+| Suricata Tier 1 on fw-router | Perimeter sensor — catches C2/exfil/north-south; mirrors enterprise perimeter IDS |
+| Suricata Tier 2 on aurora virbr-lab | Internal sensor — catches lateral movement bypassing router; mirrors core switch SPAN |
+| Sysmon on Windows VMs | Host EDR for process/registry/file telemetry; required for most ART technique coverage |
+| auditd on Linux VMs | Linux equivalent of Sysmon for host EDR tier |
 | Wazuh all-in-one installer | Simplest single-node path |
 | Splunk Enterprise free tier | 500MB/day — sufficient for home lab |
 | Windows Server 2022 eval ISO | 180-day free trial |
-| Kali as full VM (not Distrobox) | Needs isolated network segment, real NIC for attack scenarios |
-| Sandbox on lab-sandbox only | OPNsense blocks real internet; Wazuh captures all activity |
-| Passwordless sudo | Required for bridge/network management without interactive auth |
+| Sandbox on lab-sandbox only | fw-router blocks real internet; Wazuh captures all activity |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
@@ -152,16 +188,17 @@ Phase 3 — Firewall VM (Alpine Linux + nftables, replacing OPNsense)
 | Ubuntu ISO corruption (dual wget processes) | 1 | Fixed: killed both, deleted, single fresh download |
 | QEMU permission denied on /home/blyons ISO path | 1 | Fixed: sudo chmod o+x on path components |
 | Wazuh install URL 403 (packages.wazuh.com/4.x) | 1 | Fixed: use version-specific URL /4.14/wazuh-install.sh |
-| Ubuntu autoinstall requires manual "yes" confirmation | 1 | User confirmed manually; accepted Ubuntu safety UX |
-| Kali ISO checksum mismatch (e1a1654f vs 3b4a3a9f) | 1 | Deleted; switched to official QEMU qcow2 7z instead |
-| OPNsense interactive console setup too cumbersome | 1 | Replaced with Alpine Linux + nftables router VM |
+| Kali ISO checksum mismatch | 1 | Deleted; switched to official QEMU qcow2 7z |
+| OPNsense interactive console too cumbersome | 1 | Replaced with Alpine Linux + nftables |
+| Alpine live ISO loses state on VM reboot | 1 | Must run setup-alpine to install to disk first |
+| virsh send-key drops uppercase letters silently | multiple | Avoid uppercase in all send-key commands |
+| HTTP server blocked by firewalld from VM | 1 | sudo firewall-cmd --zone=libvirt --add-port=8080/tcp |
 
 ## Notes
-- Build order: sudo fix → networks → OPNsense → Wazuh → Splunk → DC → Win host → Linux sender → Kali → Sandbox
-- Kali QEMU image: https://cdimage.kali.org/kali-2025.4/kali-linux-2025.4-qemu-amd64.7z (SHA256: e4b958f89d5c26f672a140628315a3a8f733fde9830722ae3d371b5536285d1d)
-- Alpine Linux ISO: https://alpinelinux.org/downloads/ (Virtual, amd64)
-- OPNsense ISO retained in isos/ as fallback but NOT used
+- SSH to fw-router: `ssh -i ~/.ssh/fw-router-key root@192.168.122.54` (WAN IP — changes on reboot; configure static after Suricata done)
+- Kali QEMU image: kali-linux-2025.4-qemu-amd64.7z (SHA256: e4b958f89d5c26f672a140628315a3a8f733fde9830722ae3d371b5536285d1d)
+- Wazuh dashboard: https://192.168.10.10 — admin / (see wazuh-install-files.tar on VM)
+- Scripts: scripts/fw-router/ (alpine-answers, fw-setup.sh, nftables.conf)
 - Windows evals: https://www.microsoft.com/en-us/evalcenter/
-- Wazuh: https://documentation.wazuh.com/current/installation-guide/
-- Splunk: https://www.splunk.com/en_us/download/splunk-enterprise.html
-- Previously ran homelab on Proxmox (offline/dismantled) — configs archived in backup
+- Sysmon configs: SwiftOnSecurity (broad) or Olaf Hartong modular (recommended for ART tuning)
+- Atomic Red Team: https://github.com/redcanaryco/atomic-red-team
