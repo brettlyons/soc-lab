@@ -12,7 +12,7 @@ Build a local SOC/Blue Team practice lab on `aurora` (Aurora OS, KVM/virt-manage
 - **Hypervisor:** QEMU/KVM + virt-manager (already installed)
 
 ## Current Phase
-Phase 5 — Wazuh complete, Splunk autoinstall ready, OPNsense pending ISO download
+Phase 3 — Firewall VM (Alpine Linux + nftables, replacing OPNsense)
 
 ## Phases
 
@@ -31,19 +31,22 @@ Phase 5 — Wazuh complete, Splunk autoinstall ready, OPNsense pending ISO downl
 - [x] Download ISOs (Ubuntu 24.04.4 ✓, OPNsense 26.1.2 downloading, Kali 2025.4 downloading, Win11 ✓)
 - **Status:** complete
 
-### Phase 3: OPNsense Firewall
-- [ ] Create OPNsense VM (2GB RAM, 2 vCPU, 20GB disk)
-- [ ] Attach 5 NICs: WAN (NAT uplink) + 4 lab networks
-- [ ] Initial OPNsense setup (WAN, LAN/SOC interface)
-- [ ] Configure interfaces for all 4 segments
-- [ ] Set firewall rules:
-  - lab-soc ↔ lab-domain: allow (agents/logs)
-  - lab-soc ↔ lab-attack: allow (Kali reporting to Wazuh)
-  - lab-sandbox → internet: BLOCK
-  - lab-sandbox ↔ lab-soc: allow (Wazuh agent only)
-  - lab-attack → lab-domain: allow (attack traffic for lab scenarios)
-- [ ] Enable syslog forwarding to Wazuh
-- **Status:** pending
+### Phase 3: Firewall Router VM (Alpine Linux + nftables + Suricata)
+> **Decision:** Replaced OPNsense with Alpine Linux + nftables. Simpler, fully scriptable,
+> ~512MB RAM / 4GB disk vs 2GB / 20GB.
+> **Network redesign:** Collapsed 4 segments → 2. lab-net (flat, all VMs, full internet/NAT)
+> + lab-sandbox (isolated, no internet). Kali needs full internet for VPN to HTB/THM etc.
+- [x] Download Alpine Linux 3.23.3 Virtual ISO (SHA256 verified ✓)
+- [ ] Delete stale libvirt networks (lab-soc, lab-domain, lab-attack) — replace with lab-net
+- [ ] Create VM (512MB RAM, 1 vCPU, 4GB disk)
+- [ ] Attach 3 NICs: WAN (virbr0) + lab-net + lab-sandbox
+- [ ] Run alpine-setup, configure interfaces + static IPs
+- [ ] Enable IP forwarding
+- [ ] Write nftables ruleset: NAT lab-net→WAN, block sandbox→WAN, allow sandbox→Wazuh only
+- [ ] Install Suricata + configure on lab-net interface (ET Open rules)
+- [ ] Configure rsyslog → Wazuh UDP 514
+- [ ] Configure Suricata EVE JSON → Wazuh agent
+- **Status:** in_progress
 
 ### Phase 4: Wazuh Server
 - [x] Create Ubuntu 24.04 VM (8GB RAM, 4 vCPU, 80GB disk) — unattended via autoinstall seed ISO
@@ -114,7 +117,7 @@ Phase 5 — Wazuh complete, Splunk autoinstall ready, OPNsense pending ISO downl
 
 | VM            | OS                   | RAM  | vCPU | Disk  | Networks                          |
 |---------------|----------------------|------|------|-------|-----------------------------------|
-| OPNsense      | OPNsense (FreeBSD)   | 2GB  | 2    | 20GB  | WAN + all 4 lab segments          |
+| fw-router     | Alpine Linux         | 512MB| 1    | 4GB   | WAN + all 4 lab segments          |
 | Wazuh         | Ubuntu 24.04 LTS     | 8GB  | 4    | 80GB  | lab-soc, lab-domain, lab-sandbox  |
 | Splunk        | Ubuntu 24.04 LTS     | 8GB  | 4    | 80GB  | lab-soc, lab-domain               |
 | DC01          | Windows Server 2022  | 4GB  | 2    | 60GB  | lab-domain                        |
@@ -122,7 +125,7 @@ Phase 5 — Wazuh complete, Splunk autoinstall ready, OPNsense pending ISO downl
 | Linux sender  | Ubuntu 24.04 LTS     | 2GB  | 2    | 40GB  | lab-domain                        |
 | Kali          | Kali Linux           | 4GB  | 2    | 60GB  | lab-attack, lab-domain            |
 | Sandbox       | TBD                  | 4GB  | 2    | 60GB  | lab-sandbox                       |
-| **Total**     |                      | **36GB** | **20** | **460GB** |                           |
+| **Total**     |                      | **34.5GB** | **19** | **444GB** |                        |
 | Host headroom | Aurora               | ~18GB | 2+  | —     | —                                 |
 
 > qcow2 thin provisioning: 460GB allocated, actual initial usage ~80–120GB
@@ -133,7 +136,7 @@ Phase 5 — Wazuh complete, Splunk autoinstall ready, OPNsense pending ISO downl
 |----------|-----------|
 | QEMU/KVM + virt-manager | Already installed, native Linux, best performance |
 | 4 isolated libvirt networks | L3 segmentation; firewall enforces inter-VLAN policy |
-| OPNsense firewall VM | Controls all inter-segment routing; logs feed Wazuh; realistic enterprise pattern |
+| Alpine Linux + nftables firewall | Simpler, fully scriptable, ~512MB RAM vs 2GB; same segmentation/log goals as OPNsense |
 | Wazuh all-in-one installer | Simplest single-node path |
 | Splunk Enterprise free tier | 500MB/day — sufficient for home lab |
 | Windows Server 2022 eval ISO | 180-day free trial |
@@ -150,11 +153,14 @@ Phase 5 — Wazuh complete, Splunk autoinstall ready, OPNsense pending ISO downl
 | QEMU permission denied on /home/blyons ISO path | 1 | Fixed: sudo chmod o+x on path components |
 | Wazuh install URL 403 (packages.wazuh.com/4.x) | 1 | Fixed: use version-specific URL /4.14/wazuh-install.sh |
 | Ubuntu autoinstall requires manual "yes" confirmation | 1 | User confirmed manually; accepted Ubuntu safety UX |
+| Kali ISO checksum mismatch (e1a1654f vs 3b4a3a9f) | 1 | Deleted; switched to official QEMU qcow2 7z instead |
+| OPNsense interactive console setup too cumbersome | 1 | Replaced with Alpine Linux + nftables router VM |
 
 ## Notes
 - Build order: sudo fix → networks → OPNsense → Wazuh → Splunk → DC → Win host → Linux sender → Kali → Sandbox
-- Kali ISO: https://www.kali.org/get-kali/#kali-virtual-machines (or bare ISO)
-- OPNsense ISO: https://opnsense.org/download/
+- Kali QEMU image: https://cdimage.kali.org/kali-2025.4/kali-linux-2025.4-qemu-amd64.7z (SHA256: e4b958f89d5c26f672a140628315a3a8f733fde9830722ae3d371b5536285d1d)
+- Alpine Linux ISO: https://alpinelinux.org/downloads/ (Virtual, amd64)
+- OPNsense ISO retained in isos/ as fallback but NOT used
 - Windows evals: https://www.microsoft.com/en-us/evalcenter/
 - Wazuh: https://documentation.wazuh.com/current/installation-guide/
 - Splunk: https://www.splunk.com/en_us/download/splunk-enterprise.html

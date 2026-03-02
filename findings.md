@@ -25,81 +25,76 @@
 ## Network Topology
 
 ```
-[aurora host — NAT uplink (virbr0)]
-              |
-        [OPNsense FW VM]
-              |
-    ┌─────────┼──────────┬──────────────┐
-    │         │          │              │
-lab-soc   lab-domain  lab-attack   lab-sandbox
-192.168.10  192.168.20  192.168.30   192.168.40
-    │         │          │              │
-Wazuh       DC01        Kali        Sandbox
-Splunk    Win-host                 (no internet)
-          Linux-sender
+[aurora host]
+      │
+  virbr0 (NAT → internet)
+      │
+[fw-router — Alpine Linux + nftables + Suricata]
+  eth0 → WAN (virbr0)
+  eth1 → lab-net      192.168.10.0/24   (all lab VMs — full NAT internet)
+  eth2 → lab-sandbox  192.168.40.0/24   (sandbox only — WAN BLOCKED)
 ```
+
+> **Design rationale:** Flat lab-net for all attack/defend VMs. Kali needs full internet
+> for VPN to training sites (HackTheBox, TryHackMe, etc.) and free access to targets
+> for detection tuning. Only the sandbox is genuinely isolated (blocks real C2 callbacks).
 
 ## Virtual Networks
 
-| VLAN | Name | Subnet | Bridge | Gateway | Purpose |
-|------|------|--------|--------|---------|---------|
-| — | WAN | NAT via virbr0 | virbr0 | DHCP | OPNsense uplink only |
-| 10 | lab-soc | 192.168.10.0/24 | virbr-soc | 192.168.10.1 (OPN) | SOC tools |
-| 20 | lab-domain | 192.168.20.0/24 | virbr-domain | 192.168.20.1 (OPN) | AD domain + log sources |
-| 30 | lab-attack | 192.168.30.0/24 | virbr-attack | 192.168.30.1 (OPN) | Kali attack platform |
-| 40 | lab-sandbox | 192.168.40.0/24 | virbr-sandbox | 192.168.40.1 (OPN) | Isolated sandbox |
+| Name | Subnet | Bridge | Gateway | Purpose |
+|------|--------|--------|---------|---------|
+| WAN | NAT via virbr0 | virbr0 | DHCP | Router uplink only |
+| lab-net | 192.168.10.0/24 | virbr-net | 192.168.10.1 (fw) | All lab VMs, full internet |
+| lab-sandbox | 192.168.40.0/24 | virbr-sandbox | 192.168.40.1 (fw) | Sandbox, no internet |
 
 ## IP Assignments
 
-| VM | lab-soc (10) | lab-domain (20) | lab-attack (30) | lab-sandbox (40) |
-|---|---|---|---|---|
-| OPNsense | 192.168.10.1 | 192.168.20.1 | 192.168.30.1 | 192.168.40.1 |
-| Wazuh | 192.168.10.10 | — | — | 192.168.40.10* |
-| Splunk | 192.168.10.40 | — | — | — |
-| DC01 | — | 192.168.20.20 | — | — |
-| Windows host | — | 192.168.20.30 | — | — |
-| Linux sender | — | 192.168.20.50 | — | — |
-| Kali | — | 192.168.20.60* | 192.168.30.10 | — |
-| Sandbox | — | — | — | 192.168.40.50 |
+| VM | lab-net (10) | lab-sandbox (40) | Notes |
+|---|---|---|---|
+| fw-router | 192.168.10.1 | 192.168.40.1 | Alpine, nftables, Suricata |
+| Wazuh | 192.168.10.10 | 192.168.40.10 | NIC on both to reach sandbox agent |
+| Splunk | 192.168.10.40 | — | |
+| DC01 | 192.168.10.20 | — | |
+| Windows host | 192.168.10.30 | — | |
+| Linux sender | 192.168.10.50 | — | |
+| Kali | 192.168.10.60 | — | Full internet + VPN to HTB/THM etc. |
+| Sandbox | — | 192.168.40.50 | No internet, Wazuh agent only |
 
-*Wazuh gets a NIC in lab-sandbox to receive agent traffic from the sandbox VM
-*Kali gets an optional NIC in lab-domain for attack scenario access to the AD environment
-
-## Firewall Rules (OPNsense)
+## Firewall Rules (nftables)
 
 | Source | Destination | Action | Reason |
 |---|---|---|---|
-| lab-domain | lab-soc (Wazuh 10.10, Splunk 10.40) | ALLOW | Agent/log forwarding |
-| lab-attack | lab-domain | ALLOW | Kali → AD attack scenarios |
-| lab-attack | lab-soc (Wazuh 10.10) | ALLOW | Optional: Kali agent reporting |
-| lab-sandbox | lab-soc (Wazuh 40.10) | ALLOW | Wazuh agent only |
-| lab-sandbox | WAN (internet) | BLOCK | Prevent real phone-home |
-| lab-sandbox | lab-domain | BLOCK | Isolate from AD |
-| lab-sandbox | lab-attack | BLOCK | Isolate from Kali |
-| Any | Any | BLOCK (default) | Deny all else |
+| lab-net | WAN | ALLOW (NAT/masquerade) | Internet for all lab VMs incl. Kali VPN |
+| lab-sandbox | lab-net (Wazuh 40.10) | ALLOW | Wazuh agent traffic only |
+| lab-sandbox | WAN | BLOCK | No real internet from sandbox |
+| lab-sandbox | lab-net (other) | BLOCK | Isolate from lab VMs |
+| WAN | lab-net | BLOCK (default) | No unsolicited inbound |
 
 ## VM Roster
 
 | VM | OS | RAM | vCPU | Disk | NICs |
 |---|---|---|---|---|---|
-| OPNsense | OPNsense (FreeBSD) | 2GB | 2 | 20GB | WAN + 4× lab |
-| Wazuh | Ubuntu 24.04 LTS | 8GB | 4 | 80GB | lab-soc, lab-sandbox |
-| Splunk | Ubuntu 24.04 LTS | 8GB | 4 | 80GB | lab-soc, lab-domain |
-| DC01 | Windows Server 2022 | 4GB | 2 | 60GB | lab-domain |
-| Windows host | Windows 10/11 | 4GB | 2 | 60GB | lab-domain |
-| Linux sender | Ubuntu 24.04 LTS | 2GB | 2 | 40GB | lab-domain |
-| Kali | Kali Linux | 4GB | 2 | 60GB | lab-attack, lab-domain |
+| fw-router | Alpine 3.23 | 512MB | 1 | 4GB | WAN + lab-net + lab-sandbox |
+| Wazuh | Ubuntu 24.04 LTS | 8GB | 4 | 80GB | lab-net, lab-sandbox |
+| Splunk | Ubuntu 24.04 LTS | 8GB | 4 | 80GB | lab-net |
+| DC01 | Windows Server 2022 | 4GB | 2 | 60GB | lab-net |
+| Windows host | Windows 10/11 | 4GB | 2 | 60GB | lab-net |
+| Linux sender | Ubuntu 24.04 LTS | 2GB | 2 | 40GB | lab-net |
+| Kali | Kali Linux (qcow2) | 4GB | 2 | 60GB | lab-net |
 | Sandbox | TBD | 4GB | 2 | 60GB | lab-sandbox |
-| **Total** | | **36GB** | **20** | **460GB*** | |
+| **Total** | | **34.5GB** | **19** | **444GB*** | |
 
 *qcow2 thin-provisioned — actual initial disk usage ~80–120GB
 
 ## Install Methods
 
-### OPNsense
-- Download ISO from https://opnsense.org/download/ (amd64 dvd)
-- Install to 20GB disk, configure all 5 interfaces during setup
-- Wazuh syslog forwarding: System → Log Files → Remote → add Wazuh IP:514
+### Firewall Router (Alpine Linux + nftables)
+> Replaced OPNsense. Simpler, scriptable, ~512MB RAM / 4GB disk.
+- Alpine Linux Virtual ISO (amd64): https://alpinelinux.org/downloads/
+- 5 NICs: WAN (virbr0/NAT) + lab-soc + lab-domain + lab-attack + lab-sandbox
+- IP forwarding: `echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf`
+- nftables rules file: `/etc/nftables.nft` — same policy as original OPNsense plan
+- Syslog to Wazuh: rsyslog UDP 514 → 192.168.10.10
 
 ### Wazuh
 - Ubuntu 24.04 base install → Wazuh all-in-one script

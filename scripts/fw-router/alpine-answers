@@ -1,0 +1,16 @@
+KEYMAPOPTS="us us"
+HOSTNAMEOPTS="-n fw-router"
+INTERFACESOPTS="auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+    hostname fw-router
+"
+DNSOPTS="-n 8.8.8.8"
+TIMEZONEOPTS="-z UTC"
+PROXYOPTS="none"
+APKREPOSOPTS="-1"
+SSHOPTS="-c openssh"
+NTPOPTS="-c busybox"
+DISKOPTS="-m sys /dev/vda"
