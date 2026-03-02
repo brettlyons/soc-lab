@@ -195,10 +195,18 @@ Phase 3 — Firewall VM (complete) → Phase 3b: Suricata on fw-router + aurora 
 | HTTP server blocked by firewalld from VM | 1 | sudo firewall-cmd --zone=libvirt --add-port=8080/tcp |
 
 ## Notes
-- SSH to fw-router: `ssh -i ~/.ssh/fw-router-key root@192.168.122.54` (WAN IP — changes on reboot; configure static after Suricata done)
+- SSH to fw-router: `ssh -i ~/.ssh/fw-router-key root@192.168.122.10` (fixed IP via libvirt DHCP reservation)
 - Kali QEMU image: kali-linux-2025.4-qemu-amd64.7z (SHA256: e4b958f89d5c26f672a140628315a3a8f733fde9830722ae3d371b5536285d1d)
 - Wazuh dashboard: https://192.168.10.10 — admin / (see wazuh-install-files.tar on VM)
-- Scripts: scripts/fw-router/ (alpine-answers, fw-setup.sh, nftables.conf)
+- Scripts: scripts/fw-router/ (alpine-answers, fw-setup.sh, nftables.conf), scripts/sendkey-lib.sh
+- Host setup: scripts/host-setup/host-network-setup.sh (run to restore lab networking after host reinstall)
 - Windows evals: https://www.microsoft.com/en-us/evalcenter/
 - Sysmon configs: SwiftOnSecurity (broad) or Olaf Hartong modular (recommended for ART tuning)
 - Atomic Red Team: https://github.com/redcanaryco/atomic-red-team
+
+## Host Networking (survives reboots)
+- fw-router WAN IP fixed: MAC `52:54:00:ca:03:ea` → `192.168.122.10` (libvirt DHCP reservation in default network)
+- VMs autostart: `virsh autostart fw-router` + `virsh autostart wazuh`
+- lab routes persist via NM dispatcher: `/etc/NetworkManager/dispatcher.d/99-soc-lab-routes`
+  - Adds `192.168.10.0/24` and `192.168.40.0/24` via `192.168.122.10` whenever virbr0 comes up
+- To restore from scratch: `bash scripts/host-setup/host-network-setup.sh`

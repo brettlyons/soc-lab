@@ -1,0 +1,16 @@
+#!/bin/bash
+# NetworkManager dispatcher script: add lab routes when virbr0 comes up
+# Install: sudo cp 99-soc-lab-routes /etc/NetworkManager/dispatcher.d/
+#          sudo chmod 755 /etc/NetworkManager/dispatcher.d/99-soc-lab-routes
+#
+# Routes added:
+#   192.168.10.0/24 (lab-net)    via 192.168.122.10 (fw-router)
+#   192.168.40.0/24 (lab-sandbox) via 192.168.122.10 (fw-router)
+
+IFACE="$1"
+EVENT="$2"
+
+if [ "$IFACE" = "virbr0" ] && [ "$EVENT" = "up" ]; then
+    ip route add 192.168.10.0/24 via 192.168.122.10 dev virbr0 2>/dev/null || true
+    ip route add 192.168.40.0/24 via 192.168.122.10 dev virbr0 2>/dev/null || true
+fi
