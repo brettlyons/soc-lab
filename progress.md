@@ -146,6 +146,19 @@
 - soc-lab-routes.service: installed, enabled, adds routes on every boot
 - **Next:** Phase 3b — Suricata on fw-router (Tier 1) + aurora host (Tier 2)
 
+## Session 7: 2026-03-03
+
+### Startup Check
+- Both VMs (fw-router, wazuh) running and reachable
+- Wazuh dashboard responding (HTTP 302)
+- nftables on fw-router was stopped after reboot — root cause: `/etc/nftables.nft` still referenced
+  `eth2` (lab-sandbox NIC removed in Session 6). Fixed by removing eth2 rules from `/etc/nftables.nft`.
+- Wrote `scripts/check-lab.sh` — comprehensive health check script (12 checks, all green)
+
+### Status
+- Lab fully operational ✓
+- **Next:** Phase 3b — Suricata on fw-router (Tier 1) + aurora host (Tier 2)
+
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
