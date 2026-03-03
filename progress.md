@@ -118,6 +118,32 @@
 - Phase 3b: pending — next up (Suricata on fw-router + aurora)
 - Phase 5 (Splunk): pending
 
+## Session 6: 2026-03-03
+
+### Startup & Boot Verification
+- User rebooted host — confirmed all VMs come back up cleanly
+- Three root causes found and fixed:
+
+**Issue 1: virsh wrong URI**
+- `virsh` defaults to `qemu:///session`; VMs are on `qemu:///system`
+- Always use `virsh --connect qemu:///system`
+
+**Issue 2: NM grabbing virbr0 (blocks libvirt default network)**
+- NM had a bridge profile for virbr0, recreating it at boot before libvirt could claim it
+- Fixed: `nmcli con delete virbr0` + created `/etc/NetworkManager/conf.d/unmanaged-libvirt.conf`
+  - Content: `[keyfile]` / `unmanaged-devices=interface-name:virbr*,interface-name:vnet*,interface-name:veth*`
+
+**Issue 3: nftables loading wrong file (SSH blocked to fw-router)**
+- Alpine nftables init loads `/etc/nftables.nft`, not `/etc/nftables.conf`
+- Management SSH rule was only in `.conf`; `.nft` had the old pre-management ruleset
+- Fixed: `cp /etc/nftables.conf /etc/nftables.nft && rc-service nftables reload` on fw-router
+- Confirmed all rules correct and persistent after reboot
+
+### Status after Session 6
+- Phase 3: fully verified across reboot ✓
+- Phase 4: Wazuh running, dashboard responding at https://192.168.10.10 ✓
+- **Next:** Phase 3b — Suricata on fw-router (Tier 1) + aurora host (Tier 2)
+
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
@@ -125,3 +151,8 @@
 | 2026-03-01 | -O flag (uppercase O) garbled in wget via send-key | 1 | User manually moved file; use -o or redirect instead |
 | 2026-03-01 | Alpine live ISO loses state on VM reboot | 1 | Must run setup-alpine to install to disk before rebooting |
 | 2026-03-01 | HTTP server blocked by firewalld from VM | 1 | sudo firewall-cmd --zone=libvirt --add-port=8080/tcp |
+| 2026-03-03 | virsh shows no VMs after reboot | 1 | Wrong URI — use qemu:///system not qemu:///session |
+| 2026-03-03 | libvirt default network stuck inactive after reboot | 1 | NM managed virbr0 — deleted NM profile, added unmanaged-libvirt.conf |
+| 2026-03-03 | SSH to fw-router blocked after reboot | 1 | nftables.nft (loaded by init) lacked management SSH rule; cp nftables.conf → nftables.nft |
+| 2026-03-03 | virsh send-key KEY_PERIOD invalid | 1 | Use KEY_DOT for period character |
+| 2026-03-03 | NM unmanaged-libvirt.conf broke route persistence | 1 | NM dispatcher never fires for unmanaged interfaces. Fixed: libvirt network hook at /etc/libvirt/hooks/network — fires on `default started` and adds lab routes directly |

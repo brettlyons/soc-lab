@@ -1,0 +1,9 @@
+#!/bin/bash
+# Add host routes to lab networks when the default (virbr0) network starts
+NETWORK="$1"
+ACTION="$2"
+
+if [ "$NETWORK" = "default" ] && [ "$ACTION" = "started" ]; then
+    ip route replace 192.168.10.0/24 via 192.168.122.10 dev virbr0
+    ip route replace 192.168.40.0/24 via 192.168.122.10 dev virbr0
+fi

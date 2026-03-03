@@ -193,6 +193,11 @@ Phase 3 — Firewall VM (complete) → Phase 3b: Suricata on fw-router + aurora 
 | Alpine live ISO loses state on VM reboot | 1 | Must run setup-alpine to install to disk first |
 | virsh send-key drops uppercase letters silently | multiple | Avoid uppercase in all send-key commands |
 | HTTP server blocked by firewalld from VM | 1 | sudo firewall-cmd --zone=libvirt --add-port=8080/tcp |
+| After host reboot: VMs all show stopped in virsh | 1 | Root cause: `virsh` defaults to qemu:///session; VMs live on qemu:///system. Always use `virsh --connect qemu:///system` |
+| After host reboot: `default` libvirt network stuck inactive | 1 | NM grabbed virbr0 as its own bridge, blocking libvirt. Fix: delete NM profile (`nmcli con delete virbr0`), create `/etc/NetworkManager/conf.d/unmanaged-libvirt.conf` to permanently unmanage virbr* interfaces |
+| nftables management SSH rule missing after fw-router reboot | 1 | Alpine nftables service loads `/etc/nftables.nft`, not `/etc/nftables.conf`. Correct config was only in .conf. Fix: `cp /etc/nftables.conf /etc/nftables.nft` — now persists correctly |
+| virsh send-key KEY_PERIOD invalid | 1 | Use KEY_DOT for the period character |
+| NM unmanaged-libvirt.conf broke route persistence | 1 | NM dispatcher never fires for unmanaged (virbr*) interfaces. Fixed: libvirt hook at /etc/libvirt/hooks/network adds routes on `default started` event instead |
 
 ## Notes
 - SSH to fw-router: `ssh -i ~/.ssh/fw-router-key root@192.168.122.10` (fixed IP via libvirt DHCP reservation)
@@ -206,7 +211,11 @@ Phase 3 — Firewall VM (complete) → Phase 3b: Suricata on fw-router + aurora 
 
 ## Host Networking (survives reboots)
 - fw-router WAN IP fixed: MAC `52:54:00:ca:03:ea` → `192.168.122.10` (libvirt DHCP reservation in default network)
-- VMs autostart: `virsh autostart fw-router` + `virsh autostart wazuh`
-- lab routes persist via NM dispatcher: `/etc/NetworkManager/dispatcher.d/99-soc-lab-routes`
-  - Adds `192.168.10.0/24` and `192.168.40.0/24` via `192.168.122.10` whenever virbr0 comes up
+- VMs autostart: fw-router + wazuh (`virsh --connect qemu:///system autostart <vm>`)
+- NM ignores virbr* interfaces: `/etc/NetworkManager/conf.d/unmanaged-libvirt.conf`
+  - Without this, NM grabs virbr0 at boot and blocks libvirt from starting the default network
+- Lab routes added by libvirt hook: `/etc/libvirt/hooks/network`
+  - Fires on `default started` event; adds `192.168.10.0/24` and `192.168.40.0/24` via `192.168.122.10`
+  - NM dispatcher (`99-soc-lab-routes`) is kept but does NOT fire (NM ignores virbr*)
+- Always use `virsh --connect qemu:///system` — default URI is session, not system
 - To restore from scratch: `bash scripts/host-setup/host-network-setup.sh`
