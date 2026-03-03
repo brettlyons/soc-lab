@@ -197,7 +197,9 @@ Phase 3 — Firewall VM (complete) → Phase 3b: Suricata on fw-router + aurora 
 | After host reboot: `default` libvirt network stuck inactive | 1 | NM grabbed virbr0 as its own bridge, blocking libvirt. Fix: delete NM profile (`nmcli con delete virbr0`), create `/etc/NetworkManager/conf.d/unmanaged-libvirt.conf` to permanently unmanage virbr* interfaces |
 | nftables management SSH rule missing after fw-router reboot | 1 | Alpine nftables service loads `/etc/nftables.nft`, not `/etc/nftables.conf`. Correct config was only in .conf. Fix: `cp /etc/nftables.conf /etc/nftables.nft` — now persists correctly |
 | virsh send-key KEY_PERIOD invalid | 1 | Use KEY_DOT for the period character |
-| NM unmanaged-libvirt.conf broke route persistence | 1 | NM dispatcher never fires for unmanaged (virbr*) interfaces. Fixed: libvirt hook at /etc/libvirt/hooks/network adds routes on `default started` event instead |
+| NM unmanaged-libvirt.conf broke route persistence | 1 | NM dispatcher never fires for unmanaged (virbr*) interfaces. Fixed: systemd unit `soc-lab-routes.service` adds routes after virtnetworkd starts |
+| libvirt hook caused SELinux denials + network taint | 1 | virt_hooks_unconfined boolean required; hook also caused lab-sandbox to get "tainted" state. Removed hook entirely; systemd unit is simpler and SELinux-clean |
+| lab-sandbox network stuck — "already in use by virbr0" | ongoing | Unknown libvirt internal state corruption. Workaround: removed lab-sandbox NIC from fw-router and wazuh so they can autostart. lab-sandbox disabled until Phase 10 |
 
 ## Notes
 - SSH to fw-router: `ssh -i ~/.ssh/fw-router-key root@192.168.122.10` (fixed IP via libvirt DHCP reservation)
@@ -214,8 +216,11 @@ Phase 3 — Firewall VM (complete) → Phase 3b: Suricata on fw-router + aurora 
 - VMs autostart: fw-router + wazuh (`virsh --connect qemu:///system autostart <vm>`)
 - NM ignores virbr* interfaces: `/etc/NetworkManager/conf.d/unmanaged-libvirt.conf`
   - Without this, NM grabs virbr0 at boot and blocks libvirt from starting the default network
-- Lab routes added by libvirt hook: `/etc/libvirt/hooks/network`
-  - Fires on `default started` event; adds `192.168.10.0/24` and `192.168.40.0/24` via `192.168.122.10`
-  - NM dispatcher (`99-soc-lab-routes`) is kept but does NOT fire (NM ignores virbr*)
+- Lab routes added by systemd: `/etc/systemd/system/soc-lab-routes.service`
+  - Runs after virtnetworkd; adds `192.168.10.0/24` and `192.168.40.0/24` via `192.168.122.10`
+  - Replaces the libvirt hook (removed) and NM dispatcher (doesn't fire for unmanaged interfaces)
+- lab-sandbox network: **disabled** — libvirt bug prevents it from starting alongside default network
+  - lab-sandbox NIC removed from fw-router and wazuh VMs (re-add in Phase 10)
+  - SELinux boolean `virt_hooks_unconfined` was enabled (persistent) but hook was removed anyway
 - Always use `virsh --connect qemu:///system` — default URI is session, not system
 - To restore from scratch: `bash scripts/host-setup/host-network-setup.sh`

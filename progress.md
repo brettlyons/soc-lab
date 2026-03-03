@@ -139,9 +139,11 @@
 - Fixed: `cp /etc/nftables.conf /etc/nftables.nft && rc-service nftables reload` on fw-router
 - Confirmed all rules correct and persistent after reboot
 
-### Status after Session 6
-- Phase 3: fully verified across reboot ✓
-- Phase 4: Wazuh running, dashboard responding at https://192.168.10.10 ✓
+### Status after Session 6 (final)
+- Phase 3: complete and reboot-persistent ✓
+- Phase 4: Wazuh running, dashboard at https://192.168.10.10 ✓
+- lab-sandbox NIC removed from fw-router + wazuh (lab-sandbox network disabled — libvirt bug)
+- soc-lab-routes.service: installed, enabled, adds routes on every boot
 - **Next:** Phase 3b — Suricata on fw-router (Tier 1) + aurora host (Tier 2)
 
 ## Error Log
@@ -155,4 +157,6 @@
 | 2026-03-03 | libvirt default network stuck inactive after reboot | 1 | NM managed virbr0 — deleted NM profile, added unmanaged-libvirt.conf |
 | 2026-03-03 | SSH to fw-router blocked after reboot | 1 | nftables.nft (loaded by init) lacked management SSH rule; cp nftables.conf → nftables.nft |
 | 2026-03-03 | virsh send-key KEY_PERIOD invalid | 1 | Use KEY_DOT for period character |
-| 2026-03-03 | NM unmanaged-libvirt.conf broke route persistence | 1 | NM dispatcher never fires for unmanaged interfaces. Fixed: libvirt network hook at /etc/libvirt/hooks/network — fires on `default started` and adds lab routes directly |
+| 2026-03-03 | NM unmanaged-libvirt.conf broke route persistence | 1 | NM dispatcher never fires for unmanaged interfaces. Fixed: systemd unit soc-lab-routes.service adds routes after virtnetworkd |
+| 2026-03-03 | libvirt hook SELinux denial (exit 126) caused all networks to fail autostart | 1 | Required virt_hooks_unconfined boolean AND system_u SELinux context. Too fragile — removed hook entirely |
+| 2026-03-03 | lab-sandbox "already in use by virbr0" on every start attempt | ongoing | Unknown libvirt internal state bug. Workaround: removed lab-sandbox NIC from fw-router + wazuh; lab-sandbox disabled until Phase 10 |
