@@ -74,7 +74,7 @@
 
 | VM | OS | RAM | vCPU | Disk | NICs |
 |---|---|---|---|---|---|
-| fw-router | Alpine 3.23 | 512MB | 1 | 4GB | WAN + lab-net + lab-sandbox |
+| fw-router | Alpine 3.23 | 1GB | 1 | 4GB | WAN + lab-net |
 | Wazuh | Ubuntu 24.04 LTS | 8GB | 4 | 80GB | lab-net, lab-sandbox |
 | Splunk | Ubuntu 24.04 LTS | 8GB | 4 | 80GB | lab-net |
 | DC01 | Windows Server 2022 | 4GB | 2 | 60GB | lab-net |
@@ -134,6 +134,44 @@
 - VirtIO drivers: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso
 - Kali ISO: https://www.kali.org/get-kali/#kali-installer-images
 - Previous Proxmox notes: `/home/blyons/backups/desktop/homecore-ops/workspace/homelab/notes.md`
+
+## SSH Access
+
+| Host | User | Key | Notes |
+|------|------|-----|-------|
+| fw-router (192.168.122.10) | root | `~/.ssh/fw-router-key` | Fixed IP via libvirt DHCP reservation |
+| Wazuh (192.168.10.10) | labadmin | `~/.ssh/id_ed25519` | Ubuntu, passwordless sudo |
+
+## Detection Architecture (Phase 3b — complete)
+
+### Tier 1 — Perimeter NIDS (fw-router)
+- **Suricata 8.0.3** (Alpine edge/community) on `eth1` (lab-net)
+- ET Open rules (~48k enabled), community-id enabled
+- EVE JSON → `/var/log/suricata/eve.json`
+- **rsyslog** tails eve.json → Wazuh TCP syslog port 514 (facility: local3)
+- Source IP seen by Wazuh: `192.168.10.1` (fw-router eth1)
+- Deploy: `scripts/fw-router/suricata-setup.sh` (run on fw-router as root)
+
+### Tier 2 — Internal NIDS (aurora host)
+- **Suricata** in Podman container (`jasonish/suricata:latest`) on `virbr-lab`
+- ET Open rules (~48k enabled), community-id enabled
+- EVE JSON → `/var/log/suricata/internal/eve.json`
+- **rsyslog** in Podman container (`rsyslog/syslog_appliance_alpine:latest`)
+- Forwards eve.json → Wazuh TCP syslog port 514 (facility: local4)
+- Source IP seen by Wazuh: `192.168.122.1` (aurora virbr0 gateway)
+- Quadlet units: `/etc/containers/systemd/suricata-internal.container`, `rsyslog-suricata.container`
+- Deploy: `scripts/host-setup/suricata-internal-setup.sh` (run as root on aurora)
+
+### Wazuh syslog receiver config
+- Added `<remote>` syslog stanza to `/var/ossec/etc/ossec.conf`
+- Allows: `192.168.10.1` (Tier 1) and `192.168.122.1` (Tier 2)
+- Template stanza: `scripts/host-setup/suricata-internal/wazuh-ossec-syslog-stanza.xml`
+
+### Note on Aurora OS and package installation
+- Aurora is image-based (Universal Blue / rpm-ostree). Layering packages is a last resort
+  as it breaks the clean image update chain (would require a custom base image).
+- All host-side services run as Podman containers with Quadlet systemd units instead.
+- No Wazuh agent on aurora — syslog forwarding handles log shipping.
 
 ## Issues Encountered
 | Issue | Resolution |

@@ -1,0 +1,22 @@
+[Unit]
+Description=rsyslog — Tier 2 Suricata EVE forwarder to Wazuh
+After=suricata-internal.service
+Wants=suricata-internal.service
+
+[Container]
+Image=docker.io/rsyslog/syslog_appliance_alpine:latest
+ContainerName=rsyslog-suricata
+Network=host
+
+Volume=/etc/rsyslog-suricata/rsyslog.conf:/etc/rsyslog.conf:ro,z
+Volume=/var/log/suricata/internal:/var/log/suricata:ro,z
+Volume=/var/lib/rsyslog-suricata:/work:z
+
+Exec=rsyslog
+
+[Service]
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

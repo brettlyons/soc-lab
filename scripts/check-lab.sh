@@ -87,6 +87,61 @@ else
     fail "SSH to fw-router"
 fi
 
+# ── Tier 1: Suricata on fw-router ────────────────────────────────────────────
+header "Tier 1 Suricata (fw-router)"
+if ssh $SSH_OPTS root@192.168.122.10 true 2>/dev/null; then
+    suri_status=$(ssh $SSH_OPTS root@192.168.122.10 "rc-service suricata status 2>/dev/null | awk '/status:/{print \$3}'")
+    if [[ "$suri_status" == "started" ]]; then
+        ok "fw-router Suricata: $suri_status"
+    else
+        fail "fw-router Suricata: ${suri_status:-unknown}"
+    fi
+
+    eve_lines=$(ssh $SSH_OPTS root@192.168.122.10 "wc -l < /var/log/suricata/eve.json 2>/dev/null || echo 0")
+    if [[ "$eve_lines" -gt 0 ]]; then
+        ok "fw-router EVE JSON: $eve_lines events"
+    else
+        fail "fw-router EVE JSON: empty or missing"
+    fi
+
+    rsys_status=$(ssh $SSH_OPTS root@192.168.122.10 "rc-service rsyslog status 2>/dev/null | awk '/status:/{print \$3}'")
+    if [[ "$rsys_status" == "started" ]]; then
+        ok "fw-router rsyslog: $rsys_status"
+    else
+        fail "fw-router rsyslog: ${rsys_status:-unknown}"
+    fi
+else
+    fail "fw-router SSH unreachable — skipping Tier 1 checks"
+fi
+
+# ── Tier 2: Suricata container on aurora ──────────────────────────────────────
+header "Tier 2 Suricata (aurora host)"
+if systemctl is-active --quiet suricata-internal.service 2>/dev/null; then
+    ok "suricata-internal.service: active"
+else
+    fail "suricata-internal.service: not active"
+fi
+
+if systemctl is-active --quiet rsyslog-suricata.service 2>/dev/null; then
+    ok "rsyslog-suricata.service: active"
+else
+    fail "rsyslog-suricata.service: not active"
+fi
+
+eve2_lines=$(sudo wc -l < /var/log/suricata/internal/eve.json 2>/dev/null || echo 0)
+if [[ "$eve2_lines" -gt 0 ]]; then
+    ok "aurora EVE JSON (internal): $eve2_lines events"
+else
+    fail "aurora EVE JSON (internal): empty or missing"
+fi
+
+# Verify rsyslog container has an established connection to Wazuh:514
+if sudo ss -tnp 2>/dev/null | grep -q "192.168.10.10:514"; then
+    ok "rsyslog-suricata → Wazuh :514: connection established"
+else
+    fail "rsyslog-suricata → Wazuh :514: no connection"
+fi
+
 # ── Wazuh dashboard ───────────────────────────────────────────────────────────
 header "Wazuh dashboard (https://192.168.10.10)"
 http_code=$(curl -sk --max-time 8 -o /dev/null -w "%{http_code}" https://192.168.10.10 2>/dev/null || echo 0)

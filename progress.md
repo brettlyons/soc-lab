@@ -146,6 +146,51 @@
 - soc-lab-routes.service: installed, enabled, adds routes on every boot
 - **Next:** Phase 3b — Suricata on fw-router (Tier 1) + aurora host (Tier 2)
 
+## Session 8: 2026-03-04
+
+### Phase 3b: Suricata — Perimeter + Internal NIDS (complete)
+
+**Tier 1 (fw-router):**
+- Bumped fw-router RAM 512MB → 1GB (virsh setmaxmem/setmem, reboot)
+- Installed Suricata 8.0.3 from Alpine edge/community (not in 3.23 main)
+  - suricata-update auto-fetches ET Open rules on install (~48k rules enabled)
+  - Configured af-packet on eth1 (lab-net), community-id enabled
+- Installed rsyslog; configured imfile→omfwd forwarding to Wazuh :514 (facility local3)
+- nftables.nft still had stale eth2 rules — already fixed in Session 7
+
+**Tier 2 (aurora host — Podman containers):**
+- Suricata: `jasonish/suricata:latest` on virbr-lab bridge
+  - ET Open rules via suricata-update in container (required --network host for DNS)
+  - Three volumes: /etc/suricata-internal, /var/lib/suricata-internal, /var/log/suricata/internal
+  - Quadlet: `/etc/containers/systemd/suricata-internal.container`
+- rsyslog: `rsyslog/syslog_appliance_alpine:latest`
+  - Tails /var/log/suricata/internal/eve.json → Wazuh :514 (facility local4)
+  - Required Network=host (no host networking = connection refused to 192.168.10.10)
+  - Quadlet: `/etc/containers/systemd/rsyslog-suricata.container`
+
+**Wazuh:**
+- Added syslog <remote> stanza to ossec.conf: port 514/TCP, allowed-ips 192.168.10.1 + 192.168.122.1
+- Verified both sources connected and EVE JSON arriving (confirmed via logall=yes temporarily)
+- Suricata decoder (rule 86600/86601) parses event_type fields correctly
+
+**Deployment scripts:**
+- `scripts/fw-router/suricata-setup.sh` — full Tier 1 setup from scratch
+- `scripts/host-setup/suricata-internal-setup.sh` — full Tier 2 setup from scratch
+- `scripts/host-setup/suricata-internal/` — config files and Quadlet units
+- `scripts/check-lab.sh` — updated with 7 new Suricata/rsyslog checks (20/20 total)
+
+**Gotchas logged:**
+- Suricata not in Alpine 3.23 main — must use edge/community
+- suricata-update needs --network host for DNS resolution in container
+- suricata-update needs /var/lib/suricata mounted (separate volume) to persist enabled-sources state
+- rsyslog container needs Network=host to route to 192.168.10.10 via fw-router
+- Wazuh allowed-ips must use 192.168.10.1 (fw-router eth1) not 192.168.122.10 (WAN IP)
+- Aurora is image-based — no package layering; all host services run as Podman containers
+
+### Status
+- Phase 3b: complete ✓
+- **Next:** Phase 5 — Splunk
+
 ## Session 7: 2026-03-03
 
 ### Startup Check

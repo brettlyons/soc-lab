@@ -58,20 +58,22 @@ Phase 3 — Firewall VM (complete) → Phase 3b: Suricata on fw-router + aurora 
 ### Phase 3b: Suricata — Perimeter + Internal NIDS
 > Two Suricata instances for full 3-tier coverage.
 #### Tier 1 — Perimeter (on fw-router)
-- [ ] Install Suricata on fw-router (`apk add suricata`)
-- [ ] Configure af-packet on eth1 (lab-net facing interface)
-- [ ] Download ET Open rules
-- [ ] Configure EVE JSON output → `/var/log/suricata/eve.json`
-- [ ] Install Wazuh agent on fw-router → 192.168.10.10
-- [ ] Configure Wazuh agent localfile → eve.json
+- [x] Install Suricata on fw-router (Alpine edge/community — not in 3.23 main)
+- [x] Configure af-packet on eth1 (lab-net facing interface), community-id enabled
+- [x] ET Open rules auto-fetched by suricata-update on install (~48k enabled)
+- [x] EVE JSON output → `/var/log/suricata/eve.json`
+- [x] No Wazuh agent (glibc incompatible with Alpine/musl) — rsyslog used instead
+- [x] rsyslog imfile → Wazuh TCP syslog :514 (facility local3, source 192.168.10.1)
+- [x] Deploy script: `scripts/fw-router/suricata-setup.sh`
 #### Tier 2 — Internal East-West (on aurora host)
-- [ ] Install Suricata on aurora (`rpm-ostree install suricata` or container)
-- [ ] Configure af-packet on virbr-lab bridge
-- [ ] ET Open rules (shared or separate ruleset)
-- [ ] EVE JSON output → `/var/log/suricata/internal/eve.json`
-- [ ] Install Wazuh agent on aurora → 192.168.10.10
-- [ ] Configure Wazuh agent localfile → both eve.json files
-- **Status:** pending
+- [x] Suricata in Podman container (jasonish/suricata:latest) on virbr-lab
+- [x] ET Open rules via suricata-update in container (~48k enabled)
+- [x] EVE JSON → `/var/log/suricata/internal/eve.json`, community-id enabled
+- [x] No Wazuh agent on aurora (out of scope; Aurora is image-based, no package layering)
+- [x] rsyslog in Podman container (rsyslog/syslog_appliance_alpine) → Wazuh :514 (facility local4)
+- [x] Quadlet units auto-start via multi-user.target
+- [x] Deploy script: `scripts/host-setup/suricata-internal-setup.sh`
+- **Status:** complete
 
 ### Phase 4: Wazuh Server
 - [x] Create Ubuntu 24.04 VM (8GB RAM, 4 vCPU, 80GB disk) — unattended via autoinstall seed ISO

@@ -1,0 +1,25 @@
+[Unit]
+Description=Suricata Tier 2 — Internal NIDS on virbr-lab
+After=network.target virtnetworkd.service
+Wants=virtnetworkd.service
+
+[Container]
+Image=docker.io/jasonish/suricata:latest
+ContainerName=suricata-internal
+Network=host
+AddCapability=NET_ADMIN
+AddCapability=NET_RAW
+AddCapability=SYS_NICE
+
+Volume=/etc/suricata-internal:/etc/suricata:z
+Volume=/var/lib/suricata-internal:/var/lib/suricata:z
+Volume=/var/log/suricata/internal:/var/log/suricata:z
+
+Exec=-i virbr-lab
+
+[Service]
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

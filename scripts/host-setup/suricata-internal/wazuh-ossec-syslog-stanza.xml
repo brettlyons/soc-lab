@@ -1,0 +1,14 @@
+<!-- Add this <remote> block to /var/ossec/etc/ossec.conf on the Wazuh server,
+     after the existing secure/1514 remote block.
+     Allows Suricata EVE JSON forwarded via rsyslog from:
+       192.168.10.1  = fw-router eth1 (Tier 1)
+       192.168.122.1 = aurora host virbr0 (Tier 2)
+     Apply with: sudo /var/ossec/bin/wazuh-control restart -->
+
+  <remote>
+    <connection>syslog</connection>
+    <port>514</port>
+    <protocol>tcp</protocol>
+    <allowed-ips>192.168.10.1</allowed-ips>
+    <allowed-ips>192.168.122.1</allowed-ips>
+  </remote>
