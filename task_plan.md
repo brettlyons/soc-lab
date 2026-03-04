@@ -87,10 +87,14 @@ Phase 3 — Firewall VM (complete) → Phase 3b: Suricata on fw-router + aurora 
 
 ### Phase 5: Splunk
 - [ ] Create Ubuntu 24.04 VM (8GB RAM, 4 vCPU, 80GB disk)
-- [ ] Attach NIC: lab-net
+- [ ] Attach NIC: lab-net (192.168.10.40)
 - [ ] Install Splunk Enterprise (free 500MB/day tier)
-- [ ] Enable receiving on port 9997
+- [ ] Enable receiving on port 9997 (for Splunk UFs)
 - [ ] Verify web UI accessible on port 8000
+- [ ] Configure rsyslog → Splunk HEC or syslog input (Suricata EVE from both tiers)
+  - Same forwarding pattern as Wazuh: rsyslog on fw-router + rsyslog-suricata container on aurora
+  - Goal: Suricata EVE in both Wazuh AND Splunk for query practice / comparison
+- [ ] Create index for Suricata EVE data, practice SPL queries
 - **Status:** pending
 
 ### Phase 6: Windows Domain Controller

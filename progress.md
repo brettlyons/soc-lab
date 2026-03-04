@@ -189,7 +189,10 @@
 
 ### Status
 - Phase 3b: complete ✓
-- **Next:** Phase 5 — Splunk
+- Splunk noted as "add-on" — not a blocker for Phases 6–9
+- rsyslog → Splunk forwarding (Suricata EVE to both SIEMs) planned for Phase 5
+- Blog post series planned covering the full build (post-completion)
+- **Next:** Phase 6 (Windows DC) or Phase 9 (Kali — quick win, existing qcow2)
 
 ## Session 7: 2026-03-03
 
