@@ -99,6 +99,91 @@ sources list. If it's not persisted, `enable-source et/open` is lost between run
 
 ---
 
+## Standalone Post: Forwarding rsyslog to Splunk (without a Universal Forwarder)
+
+**Status:** Ready to write. All configs working, data verified in Splunk.
+**Audience:** Security engineers / blue teamers who need to get structured logs into Splunk
+from a host that can't run a Splunk UF (musl libc, embedded device, container, etc.)
+**Origin:** Someone at a conference asked about this exact pattern.
+
+### The problem
+Splunk's Universal Forwarder requires glibc. Alpine Linux uses musl — they're binary
+incompatible. Same issue applies to embedded devices, minimal containers, etc.
+The UF is also heavier than necessary when you only need to forward one log file.
+
+### The solution: rsyslog imfile → Splunk TCP input
+rsyslog's `imfile` module tails a file and ships each line as a syslog message.
+Splunk has a built-in TCP input that receives those messages. A `transforms.conf`
+stanza strips the syslog header, leaving clean JSON as `_raw`.
+
+### Full rsyslog config (see scripts/fw-router/50-suricata-wazuh.conf)
+```
+module(load="imfile" PollingInterval="5")
+
+input(type="imfile"
+      File="/var/log/suricata/eve.json"
+      Tag="suricata-eve"
+      Severity="info"
+      Facility="local3"
+      PersistStateInterval="10"
+      ReadMode="0"
+      FreshStartTail="on"
+      StateFile="suricata-eve")
+
+if $syslogfacility-text == 'local3' then {
+    action(type="omfwd"
+           Target="192.168.10.10"
+           Port="514"
+           Protocol="tcp"
+           Template="RSYSLOG_SyslogProtocol23Format")
+    action(type="omfwd"
+           Target="192.168.10.40"
+           Port="5514"
+           Protocol="tcp"
+           Template="RSYSLOG_SyslogProtocol23Format")
+    stop
+}
+```
+
+### Full Splunk config
+**props.conf** (`/opt/splunk/etc/apps/search/local/props.conf`):
+```ini
+[suricata:eve]
+SHOULD_LINEMERGE = false
+KV_MODE = json
+TIME_PREFIX = "timestamp":"
+TIME_FORMAT = %Y-%m-%dT%H:%M:%S.%6N%z
+TRANSFORMS-strip_syslog_header = strip_syslog_header
+```
+
+**transforms.conf** (`/opt/splunk/etc/apps/search/local/transforms.conf`):
+```ini
+[strip_syslog_header]
+REGEX = ^[^{]*(\{.+\})$
+FORMAT = $1
+DEST_KEY = _raw
+```
+
+**Splunk inputs.conf** (TCP input, port 5514, index=suricata, sourcetype=suricata:eve)
+— created via Splunk web UI: Settings → Data Inputs → TCP
+
+### Key points for the post
+- `imfile` tails any file — not just syslog-format logs; works with EVE JSON, audit logs, etc.
+- Two `action()` blocks in one `if` = dual-forward to Wazuh AND Splunk simultaneously; one config, two SIEMs
+- Port 5514 (not 514) avoids collision with other syslog receivers; TCP not UDP for reliability
+- The regex in transforms.conf: `^[^{]*(\{.+\})$` — skips everything before the first `{`
+  This strips the syslog header (timestamp, hostname, tag) leaving only the JSON payload as _raw
+- `KV_MODE = json` does all field extraction automatically — no field aliases needed
+- `FreshStartTail = on` means rsyslog only ships new lines after startup — avoids replaying the whole file on restart
+
+### Verification SPL
+```spl
+index=suricata | stats count by event_type
+index=suricata event_type=alert | table _time, src_ip, dest_ip, alert.signature
+```
+
+---
+
 ## Post 5: Log Analysis — Splunk
 
 ### Setup notes (in progress)
