@@ -207,6 +207,43 @@
 - Lab fully operational ✓
 - **Next:** Phase 3b — Suricata on fw-router (Tier 1) + aurora host (Tier 2)
 
+## Session 9: 2026-03-05
+
+### Phase 5: Splunk Enterprise — complete
+
+**Splunk VM:**
+- Ubuntu 24.04 autoinstall via seed ISO: 192.168.10.40, labadmin user, SSH key auth
+- Splunk Enterprise 10.2.1 installed as `splunk` system user (root deprecated in 10.x)
+- Admin password set via user-seed.conf (--seed-passwd unreliable); boot-start via init.d
+- Deployment script: `scripts/host-setup/splunk-vm-setup.sh`
+- Autoinstall config: `autoinstall/splunk/user-data`
+
+**Suricata EVE → Splunk forwarding:**
+- rsyslog on fw-router (Tier 1) dual-forwards to Wazuh :514 AND Splunk :5514
+- rsyslog container on aurora (Tier 2) same dual-forward pattern
+- Splunk config on VM:
+  - Index: `suricata`, TCP input port 5514, sourcetype `suricata:eve`
+  - props.conf: KV_MODE=json, time parsing from "timestamp" field
+  - transforms.conf: regex strips syslog header, leaving clean JSON as _raw
+- Verified: `index=suricata | stats count by event_type` returns alert, dns, flow, ssh, tls
+
+**Traffic generation:**
+- `scripts/generate-traffic.sh` — seeds EVE events through both Tier 1 and Tier 2
+
+**Blog notes:**
+- `blog-notes.md` — running notes for all planned blog posts; Splunk section complete
+
+**Gotchas:**
+- autoinstall paused at "Continue?" prompt — seed ISO present but kernel param not set; typed yes at console
+- user-seed.conf must exist before first Splunk start (not --seed-passwd)
+- pass stores REDACTED but terminal displays SocLab1\! (shell ! escaping) — actual password has no backslash
+
+### Status
+- Phase 5: complete ✓
+- Both SIEMs (Wazuh + Splunk) receiving Suricata EVE from Tier 1 and Tier 2
+- Blog write-up planned for next session
+- **Next:** Blog post write-up, then Phase 6 (Windows DC) or Phase 9 (Kali)
+
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
