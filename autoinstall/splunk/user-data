@@ -29,9 +29,6 @@ autoinstall:
             via: 192.168.10.1
         nameservers:
           addresses: [8.8.8.8, 8.8.4.4]
-      enp2s0:
-        addresses:
-          - 192.168.20.40/24
 
   storage:
     layout:

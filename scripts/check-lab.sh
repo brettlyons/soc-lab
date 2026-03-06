@@ -151,6 +151,20 @@ else
     fail "Wazuh dashboard: HTTP $http_code (expected 200/302)"
 fi
 
+# ── Splunk ────────────────────────────────────────────────────────────────────
+header "Splunk (http://192.168.10.40:8000)"
+splunk_code=$(curl -sk --max-time 8 -o /dev/null -w "%{http_code}" http://192.168.10.40:8000 2>/dev/null || echo 0)
+if [[ "$splunk_code" =~ ^(200|301|302|303)$ ]]; then
+    ok "Splunk web UI: HTTP $splunk_code"
+else
+    fail "Splunk web UI: HTTP $splunk_code (expected 200/303)"
+fi
+if nc -z -w3 192.168.10.40 9997 2>/dev/null; then
+    ok "Splunk UF receiver: port 9997 open"
+else
+    fail "Splunk UF receiver: port 9997 unreachable"
+fi
+
 # ── Host routes ───────────────────────────────────────────────────────────────
 header "Host routes"
 if ip route show 192.168.10.0/24 | grep -q "192.168.10.0"; then

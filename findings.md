@@ -141,6 +141,7 @@
 |------|------|-----|-------|
 | fw-router (192.168.122.10) | root | `~/.ssh/fw-router-key` | Fixed IP via libvirt DHCP reservation |
 | Wazuh (192.168.10.10) | labadmin | `~/.ssh/id_ed25519` | Ubuntu, passwordless sudo |
+| Splunk (192.168.10.40) | labadmin | `~/.ssh/id_ed25519` | Ubuntu, passwordless sudo; web UI http://192.168.10.40:8000 admin/REDACTED |
 
 ## Detection Architecture (Phase 3b — complete)
 
