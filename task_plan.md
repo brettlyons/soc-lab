@@ -24,7 +24,7 @@ Build a local SOC/Blue Team practice lab on `aurora` (Aurora OS, KVM/virt-manage
 > real SPAN port on a core switch. All three tiers feed Wazuh SIEM.
 
 ## Current Phase
-Phase 3 — Firewall VM (complete) → Phase 3b: Suricata on fw-router + aurora host
+Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Windows DC) or Phase 9 (Kali).
 
 ## Phases
 
@@ -86,16 +86,18 @@ Phase 3 — Firewall VM (complete) → Phase 3b: Suricata on fw-router + aurora 
 - **Status:** complete (syslog + Suricata verification deferred to Phase 3b)
 
 ### Phase 5: Splunk
-- [ ] Create Ubuntu 24.04 VM (8GB RAM, 4 vCPU, 80GB disk)
-- [ ] Attach NIC: lab-net (192.168.10.40)
-- [ ] Install Splunk Enterprise (free 500MB/day tier)
-- [ ] Enable receiving on port 9997 (for Splunk UFs)
-- [ ] Verify web UI accessible on port 8000
-- [ ] Configure rsyslog → Splunk HEC or syslog input (Suricata EVE from both tiers)
-  - Same forwarding pattern as Wazuh: rsyslog on fw-router + rsyslog-suricata container on aurora
-  - Goal: Suricata EVE in both Wazuh AND Splunk for query practice / comparison
-- [ ] Create index for Suricata EVE data, practice SPL queries
-- **Status:** pending
+- [x] Create Ubuntu 24.04 VM (8GB RAM, 4 vCPU, 80GB disk) — autoinstall seed ISO
+- [x] Attach NIC: lab-net (192.168.10.40)
+- [x] Install Splunk Enterprise 10.2.1 as splunk system user (not root)
+- [x] Enable receiving on port 9997 (for Splunk UFs)
+- [x] Web UI accessible on port 8000, admin password via user-seed.conf
+- [x] rsyslog dual-forward: Tier 1 (fw-router) + Tier 2 (rsyslog container) → Splunk TCP :5514
+- [x] suricata index: props.conf (KV_MODE=json), transforms.conf (strip syslog header → clean JSON _raw)
+- [x] Verified: EVE events landing — alert, dns, flow, ssh, tls event types confirmed
+- [x] Deploy scripts: `scripts/host-setup/splunk-vm-setup.sh`, `autoinstall/splunk/user-data`
+- [x] Traffic seeding: `scripts/generate-traffic.sh`
+- **Status:** complete
+- **Blog post:** "Forwarding rsyslog to Splunk without a Universal Forwarder" — notes in blog-notes.md
 
 ### Phase 6: Windows Domain Controller
 - [ ] Create Windows Server 2022 VM (4GB RAM, 2 vCPU, 60GB disk)

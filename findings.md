@@ -168,6 +168,15 @@
 - Allows: `192.168.10.1` (Tier 1) and `192.168.122.1` (Tier 2)
 - Template stanza: `scripts/host-setup/suricata-internal/wazuh-ossec-syslog-stanza.xml`
 
+### Splunk EVE forwarding (Phase 5 — complete)
+- rsyslog on fw-router (Tier 1) dual-forwards: Wazuh TCP :514 AND Splunk TCP :5514
+- rsyslog container on aurora (Tier 2) same dual-forward pattern
+- Splunk index: `suricata`, sourcetype: `suricata:eve`, TCP input port 5514
+- props.conf: `KV_MODE = json` — auto-extracts all EVE fields
+- transforms.conf: regex `^[^{]*(\{.+\})$` strips syslog header, leaving clean JSON as `_raw`
+- Configs: `scripts/fw-router/50-suricata-wazuh.conf`, `scripts/host-setup/suricata-internal/rsyslog.conf`
+- Splunk app configs on VM: `/opt/splunk/etc/apps/search/local/props.conf` + `transforms.conf`
+
 ### Note on Aurora OS and package installation
 - Aurora is image-based (Universal Blue / rpm-ostree). Layering packages is a last resort
   as it breaks the clean image update chain (would require a custom base image).
