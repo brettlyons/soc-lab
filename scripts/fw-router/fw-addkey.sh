@@ -34,7 +34,7 @@ sk KEY_ENTER
 sleep 0.5
 line "root"
 sleep 0.5
-line "REDACTED"
+line "<fw-router-root-password>"
 sleep 1
 
 echo "[2] Setting up authorized_keys..."

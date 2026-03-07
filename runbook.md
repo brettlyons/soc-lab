@@ -351,12 +351,12 @@ wget -O splunk.deb '<paste-download-url>'
 sudo dpkg -i splunk.deb
 
 sudo /opt/splunk/bin/splunk start --accept-license --answer-yes \
-  --no-prompt --seed-passwd 'REDACTED'
+  --no-prompt --seed-passwd '<splunk-admin-password>'
 
 sudo /opt/splunk/bin/splunk enable boot-start -systemd-managed 1 -user splunk
 
 # Enable receiving from Universal Forwarders
-sudo /opt/splunk/bin/splunk enable listen 9997 -auth admin:'REDACTED'
+sudo /opt/splunk/bin/splunk enable listen 9997 -auth admin:'<splunk-admin-password>'
 ```
 
 Web UI: `http://192.168.10.40:8000` — user: `admin`
@@ -406,7 +406,7 @@ Install-ADDSForest `
   -DomainName "lab.local" `
   -DomainNetbiosName "LAB" `
   -InstallDns `
-  -SafeModeAdministratorPassword (ConvertTo-SecureString 'REDACTED' -AsPlainText -Force) `
+  -SafeModeAdministratorPassword (ConvertTo-SecureString '<dsrm-password>' -AsPlainText -Force) `
   -Force
 # Reboots automatically
 ```
@@ -417,12 +417,12 @@ Install-ADDSForest `
 # After DC promotion, create a standard domain user
 New-ADUser -Name "Lab User" -GivenName "Lab" -Surname "User" `
   -SamAccountName "labuser" -UserPrincipalName "labuser@lab.local" `
-  -AccountPassword (ConvertTo-SecureString 'REDACTED' -AsPlainText -Force) `
+  -AccountPassword (ConvertTo-SecureString '<labuser-password>' -AsPlainText -Force) `
   -Enabled $true
 
 # Create a domain admin for lab management
 New-ADUser -Name "Lab Admin" -SamAccountName "labadmin" `
-  -AccountPassword (ConvertTo-SecureString 'REDACTED' -AsPlainText -Force) `
+  -AccountPassword (ConvertTo-SecureString '<labadmin-password>' -AsPlainText -Force) `
   -Enabled $true
 Add-ADGroupMember -Identity "Domain Admins" -Members "labadmin"
 ```
@@ -472,7 +472,7 @@ NET START WazuhSvc
 # Download MSI from https://www.splunk.com/en_us/download/universal-forwarder.html
 msiexec /i splunkforwarder.msi /q `
   SPLUNKUSERNAME=admin `
-  SPLUNKPASSWORD="REDACTED" `
+  SPLUNKPASSWORD="<splunk-uf-password>" `
   RECEIVING_INDEXER="192.168.10.40:9997"
 ```
 
@@ -524,11 +524,11 @@ wget -O splunkuf.deb '<paste-download-url>'
 sudo dpkg -i splunkuf.deb
 
 sudo /opt/splunkforwarder/bin/splunk start --accept-license --answer-yes \
-  --no-prompt --seed-passwd 'REDACTED'
+  --no-prompt --seed-passwd '<splunk-uf-password>'
 sudo /opt/splunkforwarder/bin/splunk enable boot-start -systemd-managed 1
 
 sudo /opt/splunkforwarder/bin/splunk add forward-server 192.168.10.40:9997 \
-  -auth admin:'REDACTED'
+  -auth admin:'<splunk-uf-password>'
 
 sudo /opt/splunkforwarder/bin/splunk add monitor /var/log/syslog -index main
 sudo /opt/splunkforwarder/bin/splunk add monitor /var/log/auth.log -index main

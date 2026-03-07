@@ -20,7 +20,7 @@
 #
 # Credentials:
 #   - Splunk web UI: http://192.168.10.40:8000
-#   - Username: admin  Password: REDACTED
+#   - Username: admin  Password: <splunk-admin-password>
 #
 # Note: Splunk 10.x running as root is deprecated. This script creates a
 # dedicated splunk system user and runs Splunk under that account.
@@ -51,7 +51,7 @@ echo "[3/5] Creating splunk system user and setting admin password..."
 $SPLUNK_SSH "
     sudo useradd -r -m -s /bin/bash splunk 2>/dev/null || true
     sudo mkdir -p /opt/splunk/etc/system/local
-    printf '[user_info]\nUSERNAME = admin\nPASSWORD = REDACTED\n' | sudo tee /opt/splunk/etc/system/local/user-seed.conf > /dev/null
+    printf '[user_info]\nUSERNAME = admin\nPASSWORD = <splunk-admin-password>\n' | sudo tee /opt/splunk/etc/system/local/user-seed.conf > /dev/null
     sudo chown -R splunk:splunk /opt/splunk
 "
 
@@ -61,13 +61,13 @@ $SPLUNK_SSH "sudo -u splunk /opt/splunk/bin/splunk start --accept-license --answ
 echo "[5/5] Enabling boot-start and Splunk UF receiver on port 9997..."
 $SPLUNK_SSH "
     sudo /opt/splunk/bin/splunk enable boot-start -user splunk --accept-license --answer-yes --no-prompt 2>&1 | grep -v WARNING
-    sudo -u splunk /opt/splunk/bin/splunk enable listen 9997 -auth admin:REDACTED 2>&1
+    sudo -u splunk /opt/splunk/bin/splunk enable listen 9997 -auth admin:<splunk-admin-password> 2>&1
 "
 
 echo ""
 echo "=== Done ==="
 echo "Splunk web UI: http://${SPLUNK_HOST}:8000"
-echo "Username: admin   Password: REDACTED"
+echo "Username: admin   Password: <splunk-admin-password>"
 echo "UF receiver: TCP 9997"
 echo ""
 echo "Verify: curl -sk -o /dev/null -w '%{http_code}' http://${SPLUNK_HOST}:8000"

@@ -38,9 +38,9 @@ echo "    Waiting 45s for mirrors + reach password prompt..."
 sleep 45
 
 echo "[2] Root password (x2)..."
-line "REDACTED"
+line "<fw-router-root-password>"
 sleep 1
-line "REDACTED"
+line "<fw-router-root-password>"
 sleep 2
 
 echo "[3] Confirm disk erase..."

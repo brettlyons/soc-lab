@@ -58,7 +58,7 @@
 - Alpine 3.23.3 installed to disk via setup-alpine (user drove interactively in virt-manager)
 - SSH key auth working: `ssh -i /tmp/fw-router-key root@192.168.122.54`
 - Key stored at `/tmp/fw-router-key` (host) — save to permanent location
-- Root password: REDACTED
+- Root password: \<set during setup-alpine\>
 - PermitRootLogin: prohibit-password (key auth only — correct)
 - **Status:** SSH working, ready for nftables + Suricata config
 - Scripts saved to `scripts/fw-router/`: alpine-answers, fw-install.sh, fw-addkey.sh, fw-mvkey.sh
@@ -236,7 +236,7 @@
 **Gotchas:**
 - autoinstall paused at "Continue?" prompt — seed ISO present but kernel param not set; typed yes at console
 - user-seed.conf must exist before first Splunk start (not --seed-passwd)
-- pass stores REDACTED but terminal displays SocLab1\! (shell ! escaping) — actual password has no backslash
+- pass stores the Splunk admin password but terminal displays it with \! (shell ! escaping) — actual password has no backslash
 
 ### Status
 - Phase 5: complete ✓
