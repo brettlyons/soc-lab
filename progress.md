@@ -242,6 +242,24 @@
 - Phase 5: complete ✓
 - Both SIEMs (Wazuh + Splunk) receiving Suricata EVE from Tier 1 and Tier 2
 - Blog write-up planned for next session
+
+## Session 10: 2026-03-07
+
+### Blog & Portfolio
+- Published "Forwarding rsyslog to Splunk Without a Universal Forwarder" to brettlyons.dev
+  - Conference anecdote (Wild West Hackin' Fest) added
+  - Screenshot (`splunk_suricata_index.png`) added to Verification section
+  - IoT gateways added as a use case
+  - AI disclosure footer added
+- `brettlyons/soc-lab` GitHub repo made public
+  - Scrubbed all plaintext credentials from files and full git history (git-filter-repo)
+  - All passwords stored in pass under `soc-lab/`
+  - git-filter-repo installed via brew for future use
+
+### Status
+- Blog post (rsyslog→Splunk): published ✓
+- Repo: public ✓
+- **Next:** Phase 6 (Windows DC) or Phase 9 (Kali)
 - **Next:** Blog post write-up, then Phase 6 (Windows DC) or Phase 9 (Kali)
 
 ## Error Log
