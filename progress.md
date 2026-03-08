@@ -276,3 +276,22 @@
 | 2026-03-03 | NM unmanaged-libvirt.conf broke route persistence | 1 | NM dispatcher never fires for unmanaged interfaces. Fixed: systemd unit soc-lab-routes.service adds routes after virtnetworkd |
 | 2026-03-03 | libvirt hook SELinux denial (exit 126) caused all networks to fail autostart | 1 | Required virt_hooks_unconfined boolean AND system_u SELinux context. Too fragile — removed hook entirely |
 | 2026-03-03 | lab-sandbox "already in use by virbr0" on every start attempt | ongoing | Unknown libvirt internal state bug. Workaround: removed lab-sandbox NIC from fw-router + wazuh; lab-sandbox disabled until Phase 10 |
+
+## Session 11: 2026-03-08
+
+### Phase 7 (partial): Forensic Windows Workstation
+- Created `win11-forensic/` directory with:
+  - `Autounattend.xml` (template — ANALYST_PASS_PLACEHOLDER, no creds in git)
+  - `build-iso.sh` (reads password from `pass soc-lab/windows-analyst`, substitutes, builds ISO)
+- Password stored in `pass` under `soc-lab/windows-analyst`
+- Built `Win11_forensic_unattended.iso` (7.6GB, Win11 Pro + VirtIO drivers + Autounattend.xml)
+- Created `win-forensic` VM: 4GB RAM, 2 vCPU, 60GB qcow2, lab-net (VirtIO NIC)
+- VM started — Windows install in progress
+- Hostname: WIN-FORENSIC, user: analyst (local admin)
+- FirstLogon: SPICE tools, PowerShell RemoteSigned, WinRM, RDP, C:\Tools directories, Defender RT off
+- VM MAC: 52:54:00:e2:4c:3f (assign static IP via libvirt DHCP or manual)
+
+### Status
+- Windows install in progress
+- **Next:** Verify install completes, confirm login, assign static IP 192.168.10.50
+- **Next (Phase 7):** Wazuh agent, Sysmon, Splunk UF

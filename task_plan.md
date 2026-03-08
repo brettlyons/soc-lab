@@ -110,15 +110,20 @@ Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Win
 - [ ] Install Splunk UF → 192.168.10.40:9997
 - **Status:** pending
 
-### Phase 7: Windows Host
-- [ ] Create Windows 10/11 VM (4GB RAM, 2 vCPU, 60GB disk)
-- [ ] Attach NIC: lab-net
-- [ ] Join to lab.local domain
+### Phase 7: Windows Host (Forensic Workstation)
+- [x] Create Windows 11 Pro VM (4GB RAM, 2 vCPU, 60GB disk) — win-forensic
+- [x] Attach NIC: lab-net (MAC 52:54:00:e2:4c:3f, target IP 192.168.10.50)
+- [x] Unattended install: Autounattend.xml (hostname WIN-FORENSIC, user analyst, SPICE/RDP/WinRM/Defender RT off)
+- [x] Build pipeline: win11-forensic/build-iso.sh reads pass soc-lab/windows-analyst — no creds in git
+- [ ] Verify install completes, confirm login as analyst
+- [ ] Assign static IP 192.168.10.50 (libvirt DHCP reservation or manual)
 - [ ] Install Wazuh agent → 192.168.10.10 (Tier 3 host EDR)
 - [ ] Install Sysmon with SwiftOnSecurity or Olaf config
 - [ ] Install Splunk UF → 192.168.10.40:9997
+- [ ] Install forensic tools: Eric Zimmermann toolkit, Volatility3, WinPmem, etc.
 - [ ] Install Atomic Red Team (for detection tuning)
-- **Status:** pending
+- [ ] Join to lab.local domain (after Phase 6 DC is up)
+- **Status:** in_progress (install running)
 
 ### Phase 8: Linux Log Sender
 - [ ] Create Ubuntu 24.04 VM (2GB RAM, 2 vCPU, 40GB disk)
