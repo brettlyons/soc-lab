@@ -277,6 +277,24 @@
 | 2026-03-03 | libvirt hook SELinux denial (exit 126) caused all networks to fail autostart | 1 | Required virt_hooks_unconfined boolean AND system_u SELinux context. Too fragile — removed hook entirely |
 | 2026-03-03 | lab-sandbox "already in use by virbr0" on every start attempt | ongoing | Unknown libvirt internal state bug. Workaround: removed lab-sandbox NIC from fw-router + wazuh; lab-sandbox disabled until Phase 10 |
 
+## Session 12: 2026-03-09
+
+### Phase 7: win-forensic — RDP + clipboard working
+
+- Diagnosed boot failure: `/dev/kvm` owned by `systemd-network` instead of `kvm` group
+  - libvirt private devns couldn't bind-mount /dev/kvm → QEMU saw ENOENT
+  - Temp fix: `sudo chown root:kvm /dev/kvm && sudo chmod 0666 /dev/kvm`
+  - Permanent fix pending next reboot test: `/etc/udev/rules.d/99-kvm.rules`
+- Switched from SPICE to RDP for win-forensic console access
+  - SPICE clipboard requires `spice-vdagentd` on host (not easily installed on Aurora image-based OS)
+  - RDP clipboard works natively and is cleaner for Windows VMs
+  - `scripts/rdp-forensic.sh`: xfreerdp with 4K/HiDPI scaling, password via `/args-from:stdin`
+- Confirmed Autounattend.xml already enables RDP at FirstLogon (Order 4)
+
+### Status
+- Phase 7: in_progress — RDP working, static IP 192.168.10.50 confirmed
+- **Next:** Wazuh agent, Sysmon, Splunk UF on win-forensic; then Phase 6 (DC01)
+
 ## Session 11: 2026-03-08
 
 ### Phase 7 (partial): Forensic Windows Workstation
