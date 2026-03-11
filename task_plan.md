@@ -55,6 +55,27 @@ Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Win
 - [x] SSH key auth working (~/.ssh/fw-router-key)
 - **Status:** complete
 
+### Phase 3c: DNS + DHCP on fw-router (dnsmasq)
+> Enables lab.local hostname resolution and DHCP for all lab-net VMs.
+> BHIS checklist item: "Give D an FQDN and set up a DNS Server on the firewall"
+#### Tasks
+- [x] Install dnsmasq on fw-router (`apk add dnsmasq`)
+- [x] Deploy `/etc/dnsmasq.conf` (DNS + DHCP config)
+  - DNS: lab.local zone, upstream 1.1.1.1/8.8.8.8
+  - DHCP range: 192.168.10.100–200 (dynamic); static IPs .1–.99 untouched
+  - Static reservations: wazuh (.10), splunk (.40), win-forensic (.50)
+  - DHCP option 6 = 192.168.10.1 (DNS), option 15 = lab.local, option 66 = 192.168.10.1 (TFTP/PXE)
+- [x] Enable and start dnsmasq (rc-update add dnsmasq default)
+- [x] Verified: all A records resolve correctly from Wazuh VM
+  - fw-router.lab.local → 192.168.10.1
+  - wazuh.lab.local → 192.168.10.10
+  - splunk.lab.local → 192.168.10.40
+  - win-forensic.lab.local → 192.168.10.50
+- [ ] Verify: DHCP lease issued to a test client (verify when next VM joins lab-net)
+- [ ] Add DC01 and future VMs to dnsmasq.conf as they are built
+- Deploy script: `scripts/fw-router/dnsmasq-setup.sh` (host-side; SCPs conf then installs)
+- **Status:** complete (DHCP lease test pending next VM)
+
 ### Phase 3b: Suricata — Perimeter + Internal NIDS
 > Two Suricata instances for full 3-tier coverage.
 #### Tier 1 — Perimeter (on fw-router)
@@ -151,10 +172,30 @@ Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Win
 - **Status:** pending
 
 ### Phase 11: Integration & Validation
+> BHIS checklist items are marked (BHIS).
+
+#### Infrastructure Validation
 - [ ] Confirm all Wazuh agents reporting to dashboard
 - [ ] Confirm logs flowing into Splunk from all sources
 - [ ] Confirm Suricata EVE alerts (both tiers) visible in Wazuh
 - [ ] Test firewall rules (sandbox cannot reach internet, can reach Wazuh only)
+- [ ] Ping workstation → "internet" server and back (BHIS A↔D)
+- [ ] Verify FQDN resolution: `nslookup win-forensic.lab.local` from any VM (BHIS)
+
+#### Attack Scenarios (Blue Team detection exercises)
+- [ ] Password spray RDP on win-forensic → run DeepBlueCLI on .evtx logs (BHIS)
+- [ ] Responder LLMNR poisoning from Kali against workstations (BHIS)
+- [ ] Review PCAPs of interesting interactions in Suricata/Wireshark (BHIS)
+
+#### Webservers (BHIS)
+- [ ] Apache on Linux sender (Phase 8) — expose on port 80
+- [ ] IIS on DC01 or win-forensic — expose on port 80/443
+
+#### Hardening
+- [ ] Apply CIS benchmarks for Windows (DC01 + workstations) (BHIS)
+- [ ] Apply CIS benchmarks for Linux VMs
+
+#### Detection Tuning
 - [ ] Run Atomic Red Team subset — verify detections fire across all 3 tiers
 - [ ] Document which ART techniques hit which tier (tuning baseline)
 - [ ] Document network map and credential sheet (local only)

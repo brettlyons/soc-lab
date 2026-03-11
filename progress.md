@@ -277,6 +277,31 @@
 | 2026-03-03 | libvirt hook SELinux denial (exit 126) caused all networks to fail autostart | 1 | Required virt_hooks_unconfined boolean AND system_u SELinux context. Too fragile — removed hook entirely |
 | 2026-03-03 | lab-sandbox "already in use by virbr0" on every start attempt | ongoing | Unknown libvirt internal state bug. Workaround: removed lab-sandbox NIC from fw-router + wazuh; lab-sandbox disabled until Phase 10 |
 
+## Session 13: 2026-03-11
+
+### Phase 3c: dnsmasq DNS + DHCP on fw-router — complete
+
+- Integrated BHIS homelab checklist (`~/workspace/home_soc_story/bhis_homelab_checklist.md`)
+  - Mapped all checklist items to existing phases
+  - Added Phase 3c (DNS/DHCP), webservers, attack scenarios, CIS hardening to task_plan.md
+- Installed dnsmasq 2.91 on fw-router (`apk add dnsmasq`)
+- Single source of truth: `scripts/fw-router/dnsmasq.conf`
+- Deploy: `bash scripts/fw-router/dnsmasq-setup.sh` (host-side; install → SCP conf → restart)
+- **DNS verified** from Wazuh VM (`dig @192.168.10.1`):
+  - fw-router.lab.local → 192.168.10.1 ✓
+  - wazuh.lab.local → 192.168.10.10 ✓
+  - splunk.lab.local → 192.168.10.40 ✓
+  - win-forensic.lab.local → 192.168.10.50 ✓
+- **DHCP** configured: range 192.168.10.100–200, options 3/6/15/66
+  - Static reservations: wazuh, splunk, win-forensic by MAC
+  - DHCP lease test: pending next VM join
+- Gotcha: `expand-hosts` in dnsmasq picked up `127.0.0.1 fw-router` from /etc/hosts on fw-router
+  — removed `expand-hosts`; explicit `address=` records are sufficient
+
+### Status
+- Phase 3c: complete ✓
+- **Next:** Phase 7 (win-forensic — Splunk UF + forensic tools) or Phase 6 (DC01)
+
 ## Session 12: 2026-03-09
 
 ### Phase 7: win-forensic — RDP + clipboard working
