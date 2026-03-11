@@ -1,8 +1,8 @@
 #!/usr/sbin/nft -f
 # fw-router nftables ruleset
-# eth0 = WAN (virbr0, internet)
+# eth0 = WAN (virbr0, internet / hypervisor management)
 # eth1 = lab-net (192.168.10.0/24, all lab VMs)
-# eth2 = lab-sandbox (192.168.40.0/24, isolated)
+# eth2 = lab-sandbox (192.168.40.0/24) — NIC REMOVED, disabled until Phase 10
 
 flush ruleset
 
@@ -11,11 +11,12 @@ table inet filter {
         type filter hook input priority 0; policy drop;
         iif lo accept
         ct state established,related accept
-        # allow SSH from hypervisor host (virbr0) for management
+        # allow SSH and DNS from hypervisor host (virbr0) for management
         iif eth0 ip saddr 192.168.122.0/24 tcp dport 22 accept
+        iif eth0 ip saddr 192.168.122.0/24 udp dport 53 accept
+        iif eth0 ip saddr 192.168.122.0/24 tcp dport 53 accept
+        # accept all traffic from lab-net (VMs can reach fw-router services)
         iif eth1 accept
-        iif eth2 ip daddr 192.168.10.10 accept
-        iif eth2 drop
     }
 
     chain forward {
@@ -23,8 +24,6 @@ table inet filter {
         ct state established,related accept
         iif eth1 oif eth0 accept
         iif eth0 oif eth1 ip saddr 192.168.122.0/24 accept
-        iif eth2 oif eth1 ip daddr 192.168.10.10 accept
-        iif eth2 drop
     }
 
     chain output {

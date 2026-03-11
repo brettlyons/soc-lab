@@ -297,6 +297,18 @@
   - DHCP lease test: pending next VM join
 - Gotcha: `expand-hosts` in dnsmasq picked up `127.0.0.1 fw-router` from /etc/hosts on fw-router
   — removed `expand-hosts`; explicit `address=` records are sufficient
+- Gotcha: host couldn't reach 192.168.10.1:53 — dnsmasq bound to eth1 only, and nftables INPUT
+  only allowed SSH from eth0. Fix: added eth0+listen-address=192.168.122.10 to dnsmasq; added
+  UDP/TCP 53 accept from 192.168.122.0/24 in nftables INPUT; stub zone points to 192.168.122.10
+- Gotcha: nftables.nft still had eth2 (lab-sandbox) rules — NIC was removed in Session 6 but
+  rules were never cleaned up. Caused nft reload to fail. Removed all eth2 rules.
+- nftables.conf renamed to nftables.nft in repo (matches what Alpine init actually loads)
+- New script: `scripts/fw-router/nftables-deploy.sh` (host-side; SCPs nftables.nft → reload)
+- New script: `scripts/host-setup/lab-dns-stub.sh` (host DNS stub zone for lab.local)
+- **Verified from aurora host:**
+  - `ping wazuh.lab.local` → 192.168.10.10 ✓
+  - `ping splunk.lab.local` → 192.168.10.40 ✓
+  - fw-router.lab.local resolves but ICMP is dropped (expected — firewall blocks ping to itself)
 
 ### Status
 - Phase 3c: complete ✓
