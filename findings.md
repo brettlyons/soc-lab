@@ -1,16 +1,18 @@
 # Findings & Decisions — SOC Lab (aurora)
 
 ## Requirements
-- OPNsense firewall VM — controls all inter-segment traffic, logs to Wazuh
-- Wazuh SIEM/XDR (single-node)
-- Splunk Enterprise (log analysis, secondary SIEM)
+- Alpine Linux + nftables firewall — controls inter-segment traffic, runs Suricata + dnsmasq
+- Wazuh SIEM/XDR (single-node, all-in-one)
+- Splunk Enterprise (secondary SIEM / log analysis platform)
 - Windows Active Directory Domain Controller (lab.local)
-- Windows host joined to domain
-- Linux VM sending logs to Wazuh and Splunk
-- Kali Linux VM — attack/Red Team platform (needs real NIC, not Distrobox)
-- Sandbox VM — isolated host for phone-home/malware analysis scenarios
+- Two Windows 11 user workstations joined to domain (victims for attack scenarios)
+- Windows 11 forensic workstation (analyst machine, separate from domain users)
+- Linux VM — log sender, web server, CSRF/watering hole target
+- Kali Linux VM — Red Team attack platform (full lab-net access + internet for VPN)
+- Sandbox VM — isolated for phone-home/malware analysis
 - All running locally on `aurora` via KVM/virt-manager
-- Blue Team / SOC investigation focus
+- BHIS Home Lab checklist as guiding framework
+- Blue Team / SOC investigation + detection engineering focus
 
 ## Host Environment
 - **Hostname:** aurora
@@ -27,17 +29,30 @@
 ```
 [aurora host]
       │
-  virbr0 (NAT → internet)
+  virbr0 (NAT → internet)           192.168.122.0/24
       │
-[fw-router — Alpine Linux + nftables + Suricata]
-  eth0 → WAN (virbr0)
-  eth1 → lab-net      192.168.10.0/24   (all lab VMs — full NAT internet)
-  eth2 → lab-sandbox  192.168.40.0/24   (sandbox only — WAN BLOCKED)
+[fw-router — Alpine Linux + nftables + Suricata + dnsmasq]
+  eth0 → WAN (virbr0)               192.168.122.10
+  eth1 → lab-net                    192.168.10.1/24
+  eth2 → lab-sandbox  (NIC REMOVED — disabled until Phase 10)
+      │
+  lab-net (virbr-lab bridge)        192.168.10.0/24
+  ├── Wazuh SIEM          .10
+  ├── DC01                .20
+  ├── win-user01          .30   ← domain workstation (victim)
+  ├── win-user02          .31   ← domain workstation (victim)
+  ├── Splunk              .40
+  ├── win-forensic        .50   ← analyst/forensic workstation
+  ├── Linux sender        .51   ← log sender + web server
+  └── Kali                .60   ← Red Team attack platform
 ```
 
 > **Design rationale:** Flat lab-net for all attack/defend VMs. Kali needs full internet
 > for VPN to training sites (HackTheBox, TryHackMe, etc.) and free access to targets
 > for detection tuning. Only the sandbox is genuinely isolated (blocks real C2 callbacks).
+>
+> **eth2 / lab-sandbox:** NIC removed from fw-router due to a libvirt bug that prevented
+> lab-sandbox from starting alongside the default network. Will be re-added in Phase 10.
 
 ## Virtual Networks
 
@@ -49,52 +64,69 @@
 
 ## IP Assignments
 
-| VM | lab-net (10) | lab-sandbox (40) | Notes |
-|---|---|---|---|
-| fw-router | 192.168.10.1 | 192.168.40.1 | Alpine, nftables, Suricata |
-| Wazuh | 192.168.10.10 | 192.168.40.10 | NIC on both to reach sandbox agent |
-| Splunk | 192.168.10.40 | — | |
-| DC01 | 192.168.10.20 | — | |
-| Windows host | 192.168.10.30 | — | |
-| Linux sender | 192.168.10.50 | — | |
-| Kali | 192.168.10.60 | — | Full internet + VPN to HTB/THM etc. |
-| Sandbox | — | 192.168.40.50 | No internet, Wazuh agent only |
+| VM | IP | MAC (lab-net) | Status | Notes |
+|---|---|---|---|---|
+| fw-router | 192.168.10.1 | 52:54:00:6f:f8:de | ✓ running | Alpine, nftables, Suricata, dnsmasq |
+| Wazuh | 192.168.10.10 | 52:54:00:99:10:49 | ✓ running | SIEM/XDR, dashboard https://192.168.10.10 |
+| DC01 | 192.168.10.20 | — | pending | Windows Server 2022, AD lab.local |
+| win-user01 | 192.168.10.30 | 52:54:00:32:ec:6f | installing | Win11 workstation, labadmin, domain victim |
+| win-user02 | 192.168.10.31 | 52:54:00:bd:25:da | installing | Win11 workstation, labadmin, domain victim |
+| Splunk | 192.168.10.40 | 52:54:00:18:01:10 | ✓ running | Web UI http://192.168.10.40:8000 |
+| win-forensic | 192.168.10.50 | 52:54:00:e2:4c:3f | shut off | Win11, analyst account, forensic tools |
+| Linux sender | 192.168.10.51 | — | pending | Ubuntu, log sender + Apache web server |
+| Kali | 192.168.10.60 | — | pending | Red Team, full internet + VPN |
+| Sandbox | 192.168.40.50 | — | pending | lab-sandbox only, no internet |
+
+> fw-router WAN IP (virbr0): 192.168.122.10 (fixed via libvirt DHCP reservation)
 
 ## Firewall Rules (nftables)
 
-| Source | Destination | Action | Reason |
+Ruleset: `scripts/fw-router/nftables.nft` — deploy with `scripts/fw-router/nftables-deploy.sh`
+
+> Note: eth2 rules removed — lab-sandbox NIC was removed from fw-router (libvirt bug).
+> Sandbox rules will be re-added in Phase 10.
+
+| Chain | Interface | Rule | Reason |
 |---|---|---|---|
-| lab-net | WAN | ALLOW (NAT/masquerade) | Internet for all lab VMs incl. Kali VPN |
-| lab-sandbox | lab-net (Wazuh 40.10) | ALLOW | Wazuh agent traffic only |
-| lab-sandbox | WAN | BLOCK | No real internet from sandbox |
-| lab-sandbox | lab-net (other) | BLOCK | Isolate from lab VMs |
-| WAN | lab-net | BLOCK (default) | No unsolicited inbound |
+| input | eth0 (WAN) | ALLOW TCP 22 from 192.168.122.0/24 | SSH management from host |
+| input | eth0 (WAN) | ALLOW UDP/TCP 53 from 192.168.122.0/24 | DNS queries from host |
+| input | eth1 (lab-net) | ALLOW all | Lab VMs can reach fw-router services |
+| forward | eth1→eth0 | ALLOW all | lab-net → internet (NAT) |
+| forward | eth0→eth1 | ALLOW from 192.168.122.0/24 | Host → lab-net pass-through |
+| nat postrouting | eth0 | MASQUERADE | NAT for lab-net internet access |
+| (default) | — | DROP | All other traffic blocked |
 
 ## VM Roster
 
-| VM | OS | RAM | vCPU | Disk | NICs |
-|---|---|---|---|---|---|
-| fw-router | Alpine 3.23 | 1GB | 1 | 4GB | WAN + lab-net |
-| Wazuh | Ubuntu 24.04 LTS | 8GB | 4 | 80GB | lab-net, lab-sandbox |
-| Splunk | Ubuntu 24.04 LTS | 8GB | 4 | 80GB | lab-net |
-| DC01 | Windows Server 2022 | 4GB | 2 | 60GB | lab-net |
-| Windows host | Windows 10/11 | 4GB | 2 | 60GB | lab-net |
-| Linux sender | Ubuntu 24.04 LTS | 2GB | 2 | 40GB | lab-net |
-| Kali | Kali Linux (qcow2) | 4GB | 2 | 60GB | lab-net |
-| Sandbox | TBD | 4GB | 2 | 60GB | lab-sandbox |
-| **Total** | | **34.5GB** | **19** | **444GB*** | |
+| VM | OS | RAM | vCPU | Disk | IP | Status |
+|---|---|---|---|---|---|---|
+| fw-router | Alpine 3.23 | 1GB | 1 | 4GB | .1 | ✓ running |
+| Wazuh | Ubuntu 24.04 LTS | 8GB | 4 | 80GB | .10 | ✓ running |
+| DC01 | Windows Server 2022 | 4GB | 2 | 60GB | .20 | pending ISO |
+| win-user01 | Windows 11 Pro | 4GB | 2 | 60GB | .30 | installing |
+| win-user02 | Windows 11 Pro | 4GB | 2 | 60GB | .31 | installing |
+| Splunk | Ubuntu 24.04 LTS | 8GB | 4 | 80GB | .40 | ✓ running |
+| win-forensic | Windows 11 Pro | 4GB | 2 | 60GB | .50 | shut off |
+| Linux sender | Ubuntu 24.04 LTS | 2GB | 2 | 40GB | .51 | pending |
+| Kali | Kali Linux (qcow2) | 4GB | 2 | 60GB | .60 | pending |
+| Sandbox | TBD | 4GB | 2 | 60GB | .40.50 | pending |
+| **Total** | | **42.5GB** | **23** | **504GB** | | |
 
-*qcow2 thin-provisioned — actual initial disk usage ~80–120GB
+qcow2 thin-provisioned — actual initial disk usage ~80–120GB
 
 ## Install Methods
 
-### Firewall Router (Alpine Linux + nftables)
-> Replaced OPNsense. Simpler, scriptable, ~512MB RAM / 4GB disk.
-- Alpine Linux Virtual ISO (amd64): https://alpinelinux.org/downloads/
-- 5 NICs: WAN (virbr0/NAT) + lab-soc + lab-domain + lab-attack + lab-sandbox
-- IP forwarding: `echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf`
-- nftables rules file: `/etc/nftables.nft` — same policy as original OPNsense plan
-- Syslog to Wazuh: rsyslog UDP 514 → 192.168.10.10
+### Firewall Router (Alpine Linux + nftables + dnsmasq)
+> Replaced OPNsense. Simpler, fully scriptable, ~1GB RAM / 4GB disk.
+- Alpine Linux 3.23.3 Virtual ISO (SHA256 verified)
+- 2 active NICs: WAN (virbr0/NAT) + lab-net (eth1). eth2/lab-sandbox NIC removed (Phase 10).
+- IP forwarding: `net.ipv4.ip_forward=1` in `/etc/sysctl.conf`
+- nftables ruleset: `scripts/fw-router/nftables.nft` → deploy: `scripts/fw-router/nftables-deploy.sh`
+- Suricata 8.x (Tier 1 NIDS) on eth1, ET Open rules, EVE JSON → rsyslog → Wazuh + Splunk
+- dnsmasq: DNS (lab.local zone) + DHCP (192.168.10.100–200) on eth1
+  - Also listens on eth0 (192.168.122.10) for host DNS queries
+  - Config: `scripts/fw-router/dnsmasq.conf` → deploy: `scripts/fw-router/dnsmasq-setup.sh`
+- rsyslog forwards Suricata EVE → Wazuh TCP :514 (facility local3) + Splunk TCP :5514
 
 ### Wazuh
 - Ubuntu 24.04 base install → Wazuh all-in-one script
@@ -105,9 +137,42 @@
 - Ubuntu 24.04 base → Splunk Enterprise .deb (free account required)
 - Web UI port 8000, UF receiver port 9997
 
-### Windows Server 2022 / Windows 10/11
-- Microsoft Evaluation Center ISOs (180-day free, no license)
-- VirtIO drivers ISO for better KVM performance
+### Windows Build Pipeline
+All Windows VMs use unattended install ISOs built from templates + `pass` credentials.
+No passwords are stored in git — placeholders are substituted at build time.
+
+| VM | Build dir | pass key | Hostname | Local user |
+|---|---|---|---|---|
+| win-forensic | `win11-forensic/` | `soc-lab/windows-analyst` | WIN-FORENSIC | analyst (admin) |
+| win-user01 | `win11-workstation/` | `soc-lab/windows-workstation` | WIN-USER01 | labadmin (admin) |
+| win-user02 | `win11-workstation/` | `soc-lab/windows-workstation` | WIN-USER02 | labadmin (admin) |
+| DC01 | `win-server-2022/` | `soc-lab/dc01-admin` | DC01 | Administrator |
+
+Build command:
+- Workstations: `bash win11-workstation/build-iso.sh <HOSTNAME> ~/Downloads/Win11_25H2_English_x64.iso`
+- DC01: `bash win-server-2022/build-iso.sh ~/Downloads/WindowsServer2022*.iso` (eval ISO required)
+
+DC01 Autounattend does full unattended AD DS install + `Install-ADDSForest -DomainName lab.local` — triggers automatic reboot to complete DC promotion.
+
+VirtIO driver paths: Win11 uses `w11/amd64`, Server 2022 uses `w2k22/amd64`.
+
+**DNS architecture once DC01 is up:**
+
+DC01 is authoritative for `lab.local` and *must* be the primary DNS for domain-joined clients —
+AD Kerberos, Group Policy, and domain join all depend on the DC's SRV records
+(`_ldap._tcp.lab.local`, `_kerberos._tcp.lab.local`, etc.) which dnsmasq cannot serve.
+
+```
+Domain-joined VMs  →  DNS: 192.168.10.20 (DC01)   →  DC01 forwards unknown to 192.168.10.1
+Non-domain VMs     →  DNS: 192.168.10.1  (dnsmasq) →  forwards to 1.1.1.1/8.8.8.8
+aurora host        →  DNS: 192.168.122.10 (dnsmasq) →  lab.local stub zone only
+```
+
+Actions when DC01 is ready:
+1. Set DC01's DNS forwarder to `192.168.10.1` (Conditional Forwarders → `.` → 192.168.10.1)
+2. Set domain-joined VMs' DNS to `192.168.10.20` (handled by DHCP option 6 update or GPO)
+3. dnsmasq can optionally remove its `lab.local` A records — DC01 is now authoritative
+4. Non-domain VMs keep using dnsmasq unchanged
 
 ### Kali
 - Kali bare ISO: https://www.kali.org/get-kali/#kali-installer-images
@@ -135,13 +200,33 @@
 - Kali ISO: https://www.kali.org/get-kali/#kali-installer-images
 - Previous Proxmox notes: `/home/blyons/backups/desktop/homecore-ops/workspace/homelab/notes.md`
 
-## SSH Access
+## Access Reference
+
+### SSH
 
 | Host | User | Key | Notes |
 |------|------|-----|-------|
 | fw-router (192.168.122.10) | root | `~/.ssh/fw-router-key` | Fixed IP via libvirt DHCP reservation |
 | Wazuh (192.168.10.10) | labadmin | `~/.ssh/id_ed25519` | Ubuntu, passwordless sudo |
-| Splunk (192.168.10.40) | labadmin | `~/.ssh/id_ed25519` | Ubuntu, passwordless sudo; web UI http://192.168.10.40:8000 admin/\<password\> |
+| Splunk (192.168.10.40) | labadmin | `~/.ssh/id_ed25519` | Ubuntu, passwordless sudo |
+
+### RDP (Windows VMs)
+
+Use `bash scripts/rdp.sh` — fzf picker, pulls passwords from pass store automatically.
+
+| VM | IP | User | pass key |
+|----|-----|------|----------|
+| win-forensic | 192.168.10.50 | analyst | `soc-lab/windows-analyst` |
+| win-user01 | 192.168.10.30 | labadmin | `soc-lab/windows-workstation` |
+| win-user02 | 192.168.10.31 | labadmin | `soc-lab/windows-workstation` |
+| DC01 | 192.168.10.20 | Administrator | `soc-lab/dc01-admin` |
+
+### Web UIs
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| Wazuh dashboard | https://192.168.10.10 | admin / see `~/wazuh-install-files.tar` on Wazuh VM |
+| Splunk | http://192.168.10.40:8000 | admin / `pass soc-lab/splunk-admin` |
 
 ## Detection Architecture (Phase 3b — complete)
 

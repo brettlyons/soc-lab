@@ -120,16 +120,42 @@ Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Win
 - **Status:** complete
 - **Blog post:** "Forwarding rsyslog to Splunk without a Universal Forwarder" — notes in blog-notes.md
 
-### Phase 6: Windows Domain Controller
-- [ ] Create Windows Server 2022 VM (4GB RAM, 2 vCPU, 60GB disk)
-- [ ] Attach NIC: lab-net
-- [ ] Install AD DS role, promote to DC
-- [ ] Domain: lab.local
-- [ ] Configure DNS pointing to DC
+### Phase 6: Windows Domain Controller (DC01)
+> Build pipeline ready. Blocked on: Windows Server 2022 eval ISO download.
+
+- [x] Create build pipeline: `win-server-2022/Autounattend.xml` + `build-iso.sh`
+  - Unattended: hostname DC01, static IP 192.168.10.20, full AD DS install + forest promote
+  - Password: `pass soc-lab/dc01-admin` (never in git)
+- [ ] Download Windows Server 2022 eval ISO (Microsoft Eval Center) → `~/Downloads/`
+- [ ] Build ISO: `bash win-server-2022/build-iso.sh ~/Downloads/WindowsServer2022*.iso`
+- [ ] Create qcow2 disk (60GB) and VM (4GB RAM, 2 vCPU, lab-net)
+- [ ] Boot VM — Autounattend handles AD DS role install + `Install-ADDSForest` automatically
+- [ ] Verify DC promotion complete, `lab.local` domain active
+- [ ] Set DC01 DNS forwarder → 192.168.10.1 (dnsmasq handles non-AD queries)
+- [ ] Update dnsmasq DHCP option 6 to 192.168.10.20 for domain-joined VMs (or use GPO)
 - [ ] Install Wazuh agent → 192.168.10.10 (Tier 3 host EDR)
-- [ ] Install Sysmon with SwiftOnSecurity or Olaf config
+- [ ] Install Sysmon with Olaf Hartong modular config
 - [ ] Install Splunk UF → 192.168.10.40:9997
-- **Status:** pending
+- [ ] Create domain user accounts: mscott, dschrute (or similar — see BHIS "ridiculous usernames")
+- **Status:** pending (ISO downloading)
+
+### Phase 6b: User Workstations (WIN-USER01, WIN-USER02)
+> BHIS component A: "Client — virtual user workstations". Domain victims for attack scenarios.
+
+- [x] Create build pipeline: `win11-workstation/Autounattend.xml` + `build-iso.sh`
+  - Parameterized by hostname; labadmin account; Defender ON; RDP + WinRM enabled
+  - DNS set to 192.168.10.1 (fw-router) at first logon; lab.local search suffix
+  - Password: `pass soc-lab/windows-workstation`
+- [x] Build ISOs: WIN-USER01_unattended.iso + WIN-USER02_unattended.iso (7.6GB each)
+- [x] Create VMs (4GB RAM, 2 vCPU, 60GB each) — win-user01 (MAC 52:54:00:32:ec:6f → .30), win-user02 (MAC 52:54:00:bd:25:da → .31)
+- [x] Add static DHCP reservations + DNS A records in dnsmasq.conf
+- [ ] Verify installs complete, VMs get IPs .30 and .31, hostnames resolve
+- [ ] Install Wazuh agent → 192.168.10.10 (Tier 3 host EDR)
+- [ ] Install Sysmon with Olaf Hartong modular config
+- [ ] Install Splunk UF → 192.168.10.40:9997
+- [ ] Join to lab.local domain (after Phase 6 DC is up)
+- [ ] Create domain user accounts on DC01 + log in as domain users (mscott, dschrute etc.)
+- **Status:** in_progress (VMs installing)
 
 ### Phase 7: Windows Host (Forensic Workstation)
 - [x] Create Windows 11 Pro VM (4GB RAM, 2 vCPU, 60GB disk) — win-forensic
