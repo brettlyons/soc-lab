@@ -171,6 +171,19 @@ Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Win
 - [ ] Snapshot baseline immediately after install — revert between scenarios
 - **Status:** pending
 
+### Phase 12: Advanced Attack Scenarios
+> Requires: DC01 (Phase 6), Kali (Phase 9), Linux sender with webserver (Phase 8/11)
+
+- [ ] Set up web server on Linux sender as CSRF/watering hole bait target
+  - Apache with a malicious-looking page, log all client hits to Wazuh + Splunk
+  - Scenario: domain user "clicks link" from workstation → capture in proxy/NIDS logs
+  - Detect via: Suricata HTTP alerts, Wazuh file/process events on client
+- [ ] Watering hole attack chain: Kali serves payload → workstation fetches → Wazuh fires
+- [ ] CSRF scenario: workstation user hits attacker-controlled page, exfil via DNS/HTTP
+- [ ] Responder LLMNR poisoning from Kali → capture NTLMv2 hashes
+- [ ] Password spray RDP on WIN-USER01/02 → DeepBlueCLI on .evtx logs
+- **Status:** pending
+
 ### Phase 11: Integration & Validation
 > BHIS checklist items are marked (BHIS).
 

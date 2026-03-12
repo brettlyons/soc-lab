@@ -314,6 +314,37 @@
 - Phase 3c: complete ✓
 - **Next:** Phase 7 (win-forensic — Splunk UF + forensic tools) or Phase 6 (DC01)
 
+## Session 13 (continued): 2026-03-12
+
+### Phase 6/7: DC01 + Workstations — in progress
+
+**New build pipelines:**
+- `win11-workstation/Autounattend.xml` + `build-iso.sh` — parameterized by hostname
+  - labadmin account, Defender ON, RDP on, DNS to 192.168.10.1, lab.local suffix
+  - Password: `pass soc-lab/windows-workstation`
+- `win-server-2022/Autounattend.xml` + `build-iso.sh` — DC01
+  - Full AD DS promote + lab.local forest in FirstLogonCommands, static IP 192.168.10.20
+  - Password: `pass soc-lab/dc01-admin`
+  - **Requires Windows Server 2022 eval ISO** (download from Microsoft Eval Center)
+
+**Workstation ISOs built:**
+- `isos/WIN-USER01_unattended.iso` (7.6GB) ✓
+- `isos/WIN-USER02_unattended.iso` (7.6GB) ✓
+
+**VMs created and installing:**
+- win-user01: 4GB RAM, 2 vCPU, 60GB, lab-net, MAC 52:54:00:32:ec:6f → 192.168.10.30
+- win-user02: 4GB RAM, 2 vCPU, 60GB, lab-net, MAC 52:54:00:bd:25:da → 192.168.10.31
+
+**dnsmasq updated:** static reservations + A records for win-user01/02/dc01
+
+**Phase 12 added:** CSRF/watering hole server, full attack chain scenarios
+
+**Pending:**
+- Win installs to complete (~20-30 min)
+- Verify VMs get correct IPs via DHCP, hostnames resolve
+- Install Wazuh agent + Sysmon on both workstations
+- Download Windows Server 2022 eval ISO, then build DC01 ISO and VM
+
 ## Session 12: 2026-03-09
 
 ### Phase 7: win-forensic — RDP + clipboard working
