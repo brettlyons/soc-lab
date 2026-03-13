@@ -14,22 +14,24 @@
         </component>
 
         <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-            <!-- Eval ISO: key selects Desktop Experience edition, no activation needed -->
+            <!-- GVLK for Server 2022 Standard — Microsoft-published KMS client key.
+                 Selects the Standard edition; does not activate (eval ISO, no license needed). -->
             <UserData>
                 <ProductKey>
-                    <Key>WX4NM-KYWYW-QJJR4-XV3QB-6VM33</Key>
+                    <Key>VDYBN-27WPP-V4HQT-9VMD4-VMK7H</Key>
                     <WillShowUI>OnError</WillShowUI>
                 </ProductKey>
                 <AcceptEula>true</AcceptEula>
             </UserData>
 
-            <!-- Windows Server 2022 Standard with Desktop Experience -->
+            <!-- Index 2 = Standard Evaluation with Desktop Experience (eval ISO layout:
+                 1=Standard Core, 2=Standard Desktop, 3=Datacenter Core, 4=Datacenter Desktop) -->
             <ImageInstall>
                 <OSImage>
                     <InstallFrom>
                         <MetaData wcm:action="add">
-                            <Key>/IMAGE/NAME</Key>
-                            <Value>Windows Server 2022 SERVERSTANDARD</Value>
+                            <Key>/IMAGE/INDEX</Key>
+                            <Value>2</Value>
                         </MetaData>
                     </InstallFrom>
                     <InstallTo>
