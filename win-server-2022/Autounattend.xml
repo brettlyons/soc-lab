@@ -83,25 +83,25 @@
                 </Disk>
             </DiskConfiguration>
 
-            <!-- VirtIO drivers - Server 2022 uses w2k22 path -->
+            <!-- VirtIO drivers - Server 2022 uses 2k22 path -->
             <DriverPaths>
                 <PathAndCredentials wcm:action="add" wcm:keyValue="1">
-                    <Path>D:\viostor\w2k22\amd64</Path>
+                    <Path>D:\viostor\2k22\amd64</Path>
                 </PathAndCredentials>
                 <PathAndCredentials wcm:action="add" wcm:keyValue="2">
-                    <Path>D:\NetKVM\w2k22\amd64</Path>
+                    <Path>D:\NetKVM\2k22\amd64</Path>
                 </PathAndCredentials>
                 <PathAndCredentials wcm:action="add" wcm:keyValue="3">
-                    <Path>E:\viostor\w2k22\amd64</Path>
+                    <Path>E:\viostor\2k22\amd64</Path>
                 </PathAndCredentials>
                 <PathAndCredentials wcm:action="add" wcm:keyValue="4">
-                    <Path>E:\NetKVM\w2k22\amd64</Path>
+                    <Path>E:\NetKVM\2k22\amd64</Path>
                 </PathAndCredentials>
                 <PathAndCredentials wcm:action="add" wcm:keyValue="5">
-                    <Path>F:\viostor\w2k22\amd64</Path>
+                    <Path>F:\viostor\2k22\amd64</Path>
                 </PathAndCredentials>
                 <PathAndCredentials wcm:action="add" wcm:keyValue="6">
-                    <Path>F:\NetKVM\w2k22\amd64</Path>
+                    <Path>F:\NetKVM\2k22\amd64</Path>
                 </PathAndCredentials>
             </DriverPaths>
         </component>

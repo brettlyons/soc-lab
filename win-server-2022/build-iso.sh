@@ -62,13 +62,13 @@ log_info "Mounting and copying Windows Server ISO..."
 sudo mount -o loop,ro "$WINDOWS_ISO" "$WIN_MNT"
 sudo cp -r "$WIN_MNT"/. "$WIN_MOD"/
 
-log_info "Injecting VirtIO drivers (w2k22)..."
+log_info "Injecting VirtIO drivers (2k22)..."
 sudo mount -o loop,ro "$VIRTIO_ISO" "$VIRTIO_MNT"
 sudo cp -r "$VIRTIO_MNT"/viostor "$WIN_MOD"/
 sudo cp -r "$VIRTIO_MNT"/NetKVM  "$WIN_MOD"/
 sudo mkdir -p "$WIN_MOD/\$WinPEDriver\$"
-sudo cp -r "$VIRTIO_MNT"/viostor/w2k22/amd64/. "$WIN_MOD/\$WinPEDriver\$/"
-sudo cp -r "$VIRTIO_MNT"/NetKVM/w2k22/amd64/.  "$WIN_MOD/\$WinPEDriver\$/"
+sudo cp -r "$VIRTIO_MNT"/viostor/2k22/amd64/. "$WIN_MOD/\$WinPEDriver\$/"
+sudo cp -r "$VIRTIO_MNT"/NetKVM/2k22/amd64/.  "$WIN_MOD/\$WinPEDriver\$/"
 sudo umount "$VIRTIO_MNT"
 
 log_info "Generating Autounattend.xml with credentials..."
