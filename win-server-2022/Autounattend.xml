@@ -1,24 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
-<unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
 
     <!-- Windows PE - Install phase -->
     <settings pass="windowsPE">
-        <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+        <component xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
             <SetupUILanguage>
                 <UILanguage>en-US</UILanguage>
             </SetupUILanguage>
             <InputLocale>en-US</InputLocale>
             <SystemLocale>en-US</SystemLocale>
             <UILanguage>en-US</UILanguage>
+            <UILanguageFallback>en-US</UILanguageFallback>
             <UserLocale>en-US</UserLocale>
         </component>
 
-        <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-            <!-- GVLK for Server 2022 Standard — Microsoft-published KMS client key.
-                 Selects the Standard edition; does not activate (eval ISO, no license needed). -->
+        <!-- VirtIO drivers: DriverPaths belongs in PnpCustomizationsWinPE, NOT in Microsoft-Windows-Setup.
+             Putting it in Microsoft-Windows-Setup causes "component or setting does not exist" error.
+             Ref: https://github.com/hashicorp/packer/issues/5418
+                  https://github.com/ruzickap/packer-templates/blob/main/http/windows-2022/Autounattend.xml -->
+        <component xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   name="Microsoft-Windows-PnpCustomizationsWinPE" processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+            <!-- Server 2022 uses 2k22 path in virtio-win.iso -->
+            <DriverPaths>
+                <PathAndCredentials wcm:action="add" wcm:keyValue="1">
+                    <Path>D:\viostor\2k22\amd64</Path>
+                </PathAndCredentials>
+                <PathAndCredentials wcm:action="add" wcm:keyValue="2">
+                    <Path>D:\NetKVM\2k22\amd64</Path>
+                </PathAndCredentials>
+                <PathAndCredentials wcm:action="add" wcm:keyValue="3">
+                    <Path>E:\viostor\2k22\amd64</Path>
+                </PathAndCredentials>
+                <PathAndCredentials wcm:action="add" wcm:keyValue="4">
+                    <Path>E:\NetKVM\2k22\amd64</Path>
+                </PathAndCredentials>
+                <PathAndCredentials wcm:action="add" wcm:keyValue="5">
+                    <Path>F:\viostor\2k22\amd64</Path>
+                </PathAndCredentials>
+                <PathAndCredentials wcm:action="add" wcm:keyValue="6">
+                    <Path>F:\NetKVM\2k22\amd64</Path>
+                </PathAndCredentials>
+            </DriverPaths>
+        </component>
+
+        <component xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   name="Microsoft-Windows-Setup" processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+            <!-- Eval ISO: do NOT include <Key> — eval ISOs abort XML parsing if a key is present.
+                 Keep the <ProductKey> wrapper with <WillShowUI> only. -->
             <UserData>
                 <ProductKey>
-                    <Key>VDYBN-27WPP-V4HQT-9VMD4-VMK7H</Key>
                     <WillShowUI>OnError</WillShowUI>
                 </ProductKey>
                 <AcceptEula>true</AcceptEula>
@@ -41,7 +75,7 @@
                 </OSImage>
             </ImageInstall>
 
-            <!-- GPT/UEFI disk layout -->
+            <!-- GPT/UEFI disk layout: EFI (300MB) + MSR (16MB) + Windows (rest) -->
             <DiskConfiguration>
                 <Disk wcm:action="add">
                     <DiskID>0</DiskID>
@@ -84,46 +118,24 @@
                     </ModifyPartitions>
                 </Disk>
             </DiskConfiguration>
-
-            <!-- VirtIO drivers - Server 2022 uses 2k22 path -->
-            <DriverPaths>
-                <PathAndCredentials wcm:action="add" wcm:keyValue="1">
-                    <Path>D:\viostor\2k22\amd64</Path>
-                </PathAndCredentials>
-                <PathAndCredentials wcm:action="add" wcm:keyValue="2">
-                    <Path>D:\NetKVM\2k22\amd64</Path>
-                </PathAndCredentials>
-                <PathAndCredentials wcm:action="add" wcm:keyValue="3">
-                    <Path>E:\viostor\2k22\amd64</Path>
-                </PathAndCredentials>
-                <PathAndCredentials wcm:action="add" wcm:keyValue="4">
-                    <Path>E:\NetKVM\2k22\amd64</Path>
-                </PathAndCredentials>
-                <PathAndCredentials wcm:action="add" wcm:keyValue="5">
-                    <Path>F:\viostor\2k22\amd64</Path>
-                </PathAndCredentials>
-                <PathAndCredentials wcm:action="add" wcm:keyValue="6">
-                    <Path>F:\NetKVM\2k22\amd64</Path>
-                </PathAndCredentials>
-            </DriverPaths>
         </component>
     </settings>
 
     <!-- Specialize -->
     <settings pass="specialize">
-        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+        <component xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
             <ComputerName>DC01</ComputerName>
             <TimeZone>Mountain Standard Time</TimeZone>
-        </component>
-
-        <component name="Microsoft-Windows-WindowsUpdate-AU" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-            <NoAutoUpdate>true</NoAutoUpdate>
         </component>
     </settings>
 
     <!-- OOBE / first boot -->
     <settings pass="oobeSystem">
-        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+        <component xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
             <!-- Server: set Administrator password directly -->
             <UserAccounts>
                 <AdministratorPassword>
@@ -157,30 +169,39 @@
                     <Description>Enable WinRM</Description>
                 </SynchronousCommand>
 
-                <!-- Set static IP 192.168.10.20, gateway 192.168.10.1, DNS to itself (will host AD DNS) -->
+                <!-- Enable RDP -->
                 <SynchronousCommand wcm:action="add">
                     <Order>3</Order>
+                    <CommandLine>powershell -Command "Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0; Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'"</CommandLine>
+                    <Description>Enable RDP</Description>
+                </SynchronousCommand>
+
+                <!-- Set static IP 192.168.10.20, gateway 192.168.10.1, DNS to itself (will host AD DNS) -->
+                <SynchronousCommand wcm:action="add">
+                    <Order>4</Order>
                     <CommandLine>powershell -Command "$a = Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | Select-Object -First 1; New-NetIPAddress -InterfaceIndex $a.InterfaceIndex -IPAddress 192.168.10.20 -PrefixLength 24 -DefaultGateway 192.168.10.1; Set-DnsClientServerAddress -InterfaceIndex $a.InterfaceIndex -ServerAddresses '127.0.0.1','192.168.10.1'"</CommandLine>
                     <Description>Set static IP and DNS</Description>
                 </SynchronousCommand>
 
                 <!-- Install AD DS role -->
                 <SynchronousCommand wcm:action="add">
-                    <Order>4</Order>
+                    <Order>5</Order>
                     <CommandLine>powershell -Command "Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools"</CommandLine>
                     <Description>Install AD DS role</Description>
                 </SynchronousCommand>
 
                 <!-- Promote to DC (creates lab.local forest) — reboots automatically -->
                 <SynchronousCommand wcm:action="add">
-                    <Order>5</Order>
+                    <Order>6</Order>
                     <CommandLine>powershell -Command "Import-Module ADDSDeployment; Install-ADDSForest -DomainName 'lab.local' -DomainNetbiosName 'LAB' -ForestMode 'WinThreshold' -DomainMode 'WinThreshold' -InstallDns:$true -SafeModeAdministratorPassword (ConvertTo-SecureString 'DC01_ADMIN_PASS_PLACEHOLDER' -AsPlainText -Force) -Force:$true"</CommandLine>
                     <Description>Promote to Domain Controller (triggers reboot)</Description>
                 </SynchronousCommand>
             </FirstLogonCommands>
         </component>
 
-        <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+        <component xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   name="Microsoft-Windows-International-Core" processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
             <InputLocale>en-US</InputLocale>
             <SystemLocale>en-US</SystemLocale>
             <UILanguage>en-US</UILanguage>

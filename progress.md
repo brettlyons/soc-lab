@@ -314,6 +314,70 @@
 - Phase 3c: complete ✓
 - **Next:** Phase 7 (win-forensic — Splunk UF + forensic tools) or Phase 6 (DC01)
 
+## Session 14: 2026-03-13
+
+### DC01 Autounattend.xml — BLOCKED
+
+**Error (exact):**
+```
+Windows could not parse or process unattend answer file (D:\autounattend.xml) for pass [windowsPE].
+A component or setting specified in the answer file does not exist.
+```
+
+**What the error means:**
+Windows Setup is hitting the windowsPE pass and finding a component or setting tag it doesn't recognise.
+It does NOT get far enough to touch the `specialize` or `oobeSystem` passes.
+
+**State of `win-server-2022/Autounattend.xml` at failure:**
+- windowsPE / `Microsoft-Windows-International-Core-WinPE`: locale (en-US) — standard, unlikely to be the problem
+- windowsPE / `Microsoft-Windows-Setup` / `<UserData>`:
+  - `<ProductKey><Key>VDYBN-27WPP-V4HQT-9VMD4-VMK7H</Key><WillShowUI>OnError</WillShowUI></ProductKey>`
+  - `<AcceptEula>true</AcceptEula>`
+- windowsPE / `Microsoft-Windows-Setup` / `<ImageInstall>` / `<InstallFrom>`:
+  - `<MetaData wcm:action="add"><Key>/IMAGE/INDEX</Key><Value>2</Value></MetaData>`
+- windowsPE / `Microsoft-Windows-Setup` / `<DiskConfiguration>`: 3-partition GPT/UEFI layout
+- windowsPE / `Microsoft-Windows-Setup` / `<DriverPaths>`: VirtIO paths for D:, E:, F: drives
+
+**Attempts:**
+
+| # | What changed | Result |
+|---|--------------|--------|
+| 1 | Used `<ImageName>Windows Server 2022 SERVERSTANDARD</ImageName>` (name string) | Same error |
+| 2 | Switched to `<Key>/IMAGE/INDEX</Key><Value>2</Value>` | Same error |
+| 3 | Added GVLK key `VDYBN-27WPP-V4HQT-9VMD4-VMK7H` to `<ProductKey>` | Same error. Full rebuild: deleted ISO, destroyed VM+disk, rebuilt ISO, new VM. |
+
+**Current hypothesis:**
+The `<ProductKey>` block inside `<UserData>` in the windowsPE pass is the most likely culprit.
+Eval ISOs assign the edition by image index internally — the `<ProductKey>` element is a retail/VL concept.
+When Setup encounters `<ProductKey>` with a key it can't process against an eval image,
+it may abort XML parsing entirely rather than warn and continue.
+
+**Next steps to try (in order):**
+1. Remove `<ProductKey>` entirely; keep only `<AcceptEula>true</AcceptEula>` in `<UserData>`
+2. If still failing: strip windowsPE pass to absolute minimum (locale + AcceptEula + disk + image index only, no DriverPaths) and add DriverPaths back via a RunSynchronous command post-boot
+3. If still failing: remove `<ImageInstall>` entirely and let eval ISO select default edition interactively
+4. Validate XML schema offline with `xmllint` against `autounattend.xsd`
+
+**ISO / VM details:**
+- Source ISO: `SERVER_EVAL_x64FRE_en-us.iso` (Windows Server 2022 eval, Microsoft Eval Center)
+- Built ISO: `isos/DC01_unattended.iso`
+- VM: `dc01` (4GB RAM, 2 vCPU, 60GB, lab-net, MAC 52:54:00:b6:10:1e)
+
+**Attempt 3:** removed `<Key>` from `<ProductKey>`. Still same error.
+
+**Root cause found (Session 14 continued):**
+`<DriverPaths>` was inside `Microsoft-Windows-Setup` — that element does not exist there.
+It belongs in `Microsoft-Windows-PnpCustomizationsWinPE` (a separate component).
+Confirmed by fetching working reference: `gh api repos/ruzickap/packer-templates/contents/http/windows-2022/Autounattend.xml`
+- [packer issue #5418](https://github.com/hashicorp/packer/issues/5418)
+- [ruzickap working Server 2022 Autounattend.xml](https://github.com/ruzickap/packer-templates/blob/main/http/windows-2022/Autounattend.xml)
+
+**Also removed:** `Microsoft-Windows-WindowsUpdate-AU` from specialize pass (not valid in Server 2022).
+
+**Fix applied (attempt 4):** moved `<DriverPaths>` to `Microsoft-Windows-PnpCustomizationsWinPE`, rebuilt ISO, relaunched VM.
+
+---
+
 ## Session 13 (continued): 2026-03-12
 
 ### Phase 6/7: DC01 + Workstations — in progress

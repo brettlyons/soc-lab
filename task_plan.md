@@ -130,13 +130,13 @@ Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Win
 - [ ] Build ISO: `bash win-server-2022/build-iso.sh ~/Downloads/WindowsServer2022*.iso`
 - [ ] Create qcow2 disk (60GB) and VM (4GB RAM, 2 vCPU, lab-net)
 - [ ] Boot VM — Autounattend handles AD DS role install + `Install-ADDSForest` automatically
-- [ ] Verify DC promotion complete, `lab.local` domain active
-- [ ] Set DC01 DNS forwarder → 192.168.10.1 (dnsmasq handles non-AD queries)
+- [x] Verify DC promotion complete, `lab.local` domain active — DNSRoot=lab.local, NetBIOSName=LAB, ADWS/DNS/KDC/Netlogon all Running ✓
+- [x] Set DC01 DNS forwarder → 192.168.10.1 (dnsmasq handles non-AD queries) ✓
 - [ ] Update dnsmasq DHCP option 6 to 192.168.10.20 for domain-joined VMs (or use GPO)
 - [ ] Install Wazuh agent → 192.168.10.10 (Tier 3 host EDR)
 - [ ] Install Sysmon with Olaf Hartong modular config
 - [ ] Install Splunk UF → 192.168.10.40:9997
-- [ ] Create domain user accounts: mscott, dschrute (or similar — see BHIS "ridiculous usernames")
+- [x] Create domain user accounts: mscott, dschrute ✓
 - **Status:** pending (ISO downloading)
 
 ### Phase 6b: User Workstations (WIN-USER01, WIN-USER02)
@@ -277,6 +277,10 @@ Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Win
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
+| **DC01 Autounattend.xml: "could not parse or process unattend answer file (D:\autounattend.xml) for pass [windowsPE]. A component or setting specified in the answer file does not exist."** | 1 | Attempted: switched `<ImageName>` string → `/IMAGE/INDEX = 2`. Still failed. |
+| (same DC01 error) | 2 | Attempted: added GVLK `VDYBN-27WPP-V4HQT-9VMD4-VMK7H` to `<UserData><ProductKey>`. Rebuilt ISO from scratch (removed old ISO, destroyed VM+disk, rebuilt). Still failed with identical error. |
+| (same DC01 error) | 3 | Removed `<Key>` from `<ProductKey>`. Still failed — not the only cause. |
+| (same DC01 error) — **RESOLVED** | 4 | **Root cause: `<DriverPaths>` was inside `Microsoft-Windows-Setup`** — it is not a valid child of that component. It must be in a separate `Microsoft-Windows-PnpCustomizationsWinPE` component. Also removed `Microsoft-Windows-WindowsUpdate-AU` from specialize (not present in Server 2022, not in any reference template). Fix confirmed by comparing against [ruzickap working Server 2022 Autounattend.xml](https://github.com/ruzickap/packer-templates/blob/main/http/windows-2022/Autounattend.xml) via `gh api`. |
 | virbr0 stale bridge blocks lab-net creation | 1 | Fixed: sudo nmcli connection delete virbr0 |
 | sudo requires interactive auth in Claude session | 1 | Fixed: passwordless sudo configured |
 | Ubuntu ISO corruption (dual wget processes) | 1 | Fixed: killed both, deleted, single fresh download |
