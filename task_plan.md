@@ -277,6 +277,7 @@ Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Win
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
+| **RDP as domain users (LAB\mscott etc.) fails from aurora host** | 3 | Local user (labadmin) works with `/sec:nla`. Domain users fail — xfreerdp tries host-side Kerberos for LAB realm, aurora has no krb5.conf. Attempts: default→Kerberos error; `/sec:tls`→security nego failure; `/sec:nla`→works for local, still fails for domain. Next: configure `/etc/krb5.conf` on aurora pointing at DC01, or disable NLA requirement on workstations. **Deferred.** |
 | **DC01 Autounattend.xml: "could not parse or process unattend answer file (D:\autounattend.xml) for pass [windowsPE]. A component or setting specified in the answer file does not exist."** | 1 | Attempted: switched `<ImageName>` string → `/IMAGE/INDEX = 2`. Still failed. |
 | (same DC01 error) | 2 | Attempted: added GVLK `VDYBN-27WPP-V4HQT-9VMD4-VMK7H` to `<UserData><ProductKey>`. Rebuilt ISO from scratch (removed old ISO, destroyed VM+disk, rebuilt). Still failed with identical error. |
 | (same DC01 error) | 3 | Removed `<Key>` from `<ProductKey>`. Still failed — not the only cause. |

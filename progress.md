@@ -314,6 +314,34 @@
 - Phase 3c: complete ✓
 - **Next:** Phase 7 (win-forensic — Splunk UF + forensic tools) or Phase 6 (DC01)
 
+## Session 14 (continued): 2026-03-13
+
+### RDP domain user login — PARTIALLY BLOCKED
+
+**Problem:** RDP as domain users (LAB\mscott, LAB\dschrute) fails from aurora host. Local user (labadmin) works fine.
+
+**Error sequence and attempts:**
+
+| # | `/sec:` flag | labadmin | domain user | Error |
+|---|-------------|----------|-------------|-------|
+| 1 | default (none) | — | FAIL | `Cannot find KDC for realm "LAB"` — xfreerdp tries host-side Kerberos, aurora has no krb5.conf for LAB |
+| 2 | `/sec:tls` | FAIL | FAIL | `Protocol Security Negotiation Failure` — Windows requires NLA after domain join, rejects TLS-only |
+| 3 | `/sec:nla` | WORKS | FAIL | domain users still fail, local user works |
+
+**Current rdp.sh state:** `/sec:nla`, domain users split into `/d:LAB /u:mscott` to avoid host Kerberos lookup.
+
+**Hypothesis:** NLA with NTLM works for local accounts. For domain accounts, NLA still triggers Kerberos on the xfreerdp side even when credentials are split into `/d:` + `/u:`. May need to explicitly disable Kerberos in xfreerdp or configure `/etc/krb5.conf` on aurora to point at DC01.
+
+**Next things to try:**
+1. Add `-nego` flag or `+auth-only` variations
+2. Configure `/etc/krb5.conf` on aurora with `[realms] LAB = { kdc = 192.168.10.20 }` so host Kerberos can resolve LAB KDC
+3. Try `+credentials-delegation:off`
+4. Disable NLA requirement on win-user01 via GPO or registry: `HKLM\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp` → `SecurityLayer=1, UserAuthentication=0`
+
+**Deferred** — local labadmin RDP works, which is sufficient for now.
+
+---
+
 ## Session 14: 2026-03-13
 
 ### DC01 Autounattend.xml — BLOCKED
