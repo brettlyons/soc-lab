@@ -513,4 +513,6 @@ Domain join does **not** auto-grant RDP access. Domain users must be explicitly 
 
 The krb5.conf fix above was a real problem but a red herring for this symptom. The "Connection reset by peer" after NLA completes is the tell for an authorization rejection, not an auth failure.
 
+**Keeping `/etc/krb5.conf.d/lab-local.conf`:** It's correct config and harmless. NTLM ended up being used for the RDP handshake, but having the KDC defined means `kinit` works and any future tooling on aurora that auths against the LAB domain won't hit "Cannot find KDC" again.
+
 **TODO:** Add OpenSSH Server to Autounattend.xml templates so future VMs don't need labadmin RDP just to run a one-liner.
