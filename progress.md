@@ -473,3 +473,44 @@ Confirmed by fetching working reference: `gh api repos/ruzickap/packer-templates
 - Windows install in progress
 - **Next:** Verify install completes, confirm login, assign static IP 192.168.10.50
 - **Next (Phase 7):** Wazuh agent, Sysmon, Splunk UF
+
+## Session 15: 2026-03-14
+
+### Fix: Domain user RDP from aurora
+
+**Problem:** win-user01/02 are domain-joined and labadmin RDP works, but domain users (LAB\mscott, LAB\dschrute) cannot RDP from aurora host.
+
+**Root cause:** xfreerdp uses host-side GSSAPI/Kerberos for NLA with domain accounts. Aurora had no Kerberos realm configuration for the LAB realm — every attempt failed with `Cannot find KDC for realm "LAB"`.
+
+**Fix:** Created `/etc/krb5.conf.d/lab-local.conf` on aurora:
+```ini
+[libdefaults]
+    default_realm = LAB
+
+[realms]
+    LAB = {
+        kdc = 192.168.10.20
+        admin_server = 192.168.10.20
+    }
+
+[domain_realm]
+    .lab.local = LAB
+    lab.local = LAB
+```
+
+**Verified:** `kinit mscott@LAB` now prompts for password (KDC found) instead of "Cannot find KDC" error. The `/etc/krb5.conf.d/` drop-in is picked up via the `includedir` directive in the base `/etc/krb5.conf` — persists across reboots and image updates on Aurora OS.
+
+**Status:** Fix applied — test domain user RDP with `bash scripts/rdp.sh`.
+
+### Fix: Domain user RDP — actual root cause
+
+**Real fix:** RDP'd into win-user01 and win-user02 as labadmin, ran:
+```powershell
+Add-LocalGroupMember -Group "Remote Desktop Users" -Member "LAB\Domain Users"
+```
+
+Domain join does **not** auto-grant RDP access. Domain users must be explicitly added to the local Remote Desktop Users group. Local admin accounts bypass this — that's why labadmin worked all along.
+
+The krb5.conf fix above was a real problem but a red herring for this symptom. The "Connection reset by peer" after NLA completes is the tell for an authorization rejection, not an auth failure.
+
+**TODO:** Add OpenSSH Server to Autounattend.xml templates so future VMs don't need labadmin RDP just to run a one-liner.
