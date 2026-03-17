@@ -74,7 +74,7 @@
 | Splunk | 192.168.10.40 | 52:54:00:18:01:10 | ✓ running | Web UI http://192.168.10.40:8000 |
 | win-forensic | 192.168.10.50 | 52:54:00:e2:4c:3f | shut off | Win11, analyst account, forensic tools |
 | Linux sender | 192.168.10.51 | — | pending | Ubuntu, log sender + Apache web server |
-| Kali | 192.168.10.60 | — | pending | Red Team, full internet + VPN |
+| Kali | 192.168.10.60 | 52:54:00:d8:c1:0b | ✓ running | Red Team, full internet + VPN. Login: kali/kali |
 | Sandbox | 192.168.40.50 | — | pending | lab-sandbox only, no internet |
 
 > fw-router WAN IP (virbr0): 192.168.122.10 (fixed via libvirt DHCP reservation)
@@ -108,7 +108,7 @@ Ruleset: `scripts/fw-router/nftables.nft` — deploy with `scripts/fw-router/nft
 | Splunk | Ubuntu 24.04 LTS | 8GB | 4 | 80GB | .40 | ✓ running |
 | win-forensic | Windows 11 Pro | 4GB | 2 | 60GB | .50 | shut off |
 | Linux sender | Ubuntu 24.04 LTS | 2GB | 2 | 40GB | .51 | pending |
-| Kali | Kali Linux (qcow2) | 4GB | 2 | 60GB | .60 | pending |
+| Kali | Kali Linux (qcow2) | 4GB | 2 | 15GB | .60 | ✓ running |
 | Sandbox | TBD | 4GB | 2 | 60GB | .40.50 | pending |
 | **Total** | | **42.5GB** | **23** | **504GB** | | |
 

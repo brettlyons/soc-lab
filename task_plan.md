@@ -182,12 +182,15 @@ Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Win
 - **Status:** pending
 
 ### Phase 9: Kali Linux
-- [ ] Extract Kali qcow2 from 7z archive, move to storage pool
-- [ ] Create Kali VM (4GB RAM, 2 vCPU) using existing qcow2
-- [ ] Attach NIC: lab-net
-- [ ] Verify tools available (nmap, metasploit, impacket, etc.)
+- [x] Extract Kali qcow2 from 7z archive, move to storage pool
+- [x] Create Kali VM (4GB RAM, 2 vCPU) using existing qcow2
+- [x] Attach NIC: lab-net (MAC 52:54:00:d8:c1:0b → 192.168.10.60)
+- [x] Add DHCP reservation + DNS A record to dnsmasq
+- [x] Autostart enabled
+- [ ] Verify IP assignment + tools available (nmap, metasploit, impacket, etc.)
+- [ ] Change default password (kali/kali)
 - [ ] Install Wazuh agent (optional — track attacker activity for red team log correlation)
-- **Status:** pending
+- **Status:** in_progress
 
 ### Phase 10: Sandbox / Phone-Home Host
 - [ ] Create VM (4GB RAM, 2 vCPU, 60GB disk) — OS TBD (Windows for malware, Linux for C2)
