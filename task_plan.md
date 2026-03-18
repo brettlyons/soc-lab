@@ -133,11 +133,11 @@ Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Win
 - [x] Verify DC promotion complete, `lab.local` domain active — DNSRoot=lab.local, NetBIOSName=LAB, ADWS/DNS/KDC/Netlogon all Running ✓
 - [x] Set DC01 DNS forwarder → 192.168.10.1 (dnsmasq handles non-AD queries) ✓
 - [ ] Update dnsmasq DHCP option 6 to 192.168.10.20 for domain-joined VMs (or use GPO)
-- [ ] Install Wazuh agent → 192.168.10.10 (Tier 3 host EDR)
+- [x] Install Wazuh agent → 192.168.10.10 (Tier 3 host EDR) ✓ Active
 - [ ] Install Sysmon with Olaf Hartong modular config
 - [ ] Install Splunk UF → 192.168.10.40:9997
 - [x] Create domain user accounts: mscott, dschrute ✓
-- **Status:** pending (ISO downloading)
+- **Status:** in_progress
 
 ### Phase 6b: User Workstations (WIN-USER01, WIN-USER02)
 > BHIS component A: "Client — virtual user workstations". Domain victims for attack scenarios.
@@ -150,12 +150,12 @@ Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Win
 - [x] Create VMs (4GB RAM, 2 vCPU, 60GB each) — win-user01 (MAC 52:54:00:32:ec:6f → .30), win-user02 (MAC 52:54:00:bd:25:da → .31)
 - [x] Add static DHCP reservations + DNS A records in dnsmasq.conf
 - [ ] Verify installs complete, VMs get IPs .30 and .31, hostnames resolve
-- [ ] Install Wazuh agent → 192.168.10.10 (Tier 3 host EDR)
+- [x] Install Wazuh agent → 192.168.10.10 (Tier 3 host EDR) ✓ Active
 - [ ] Install Sysmon with Olaf Hartong modular config
 - [ ] Install Splunk UF → 192.168.10.40:9997
-- [ ] Join to lab.local domain (after Phase 6 DC is up)
-- [ ] Create domain user accounts on DC01 + log in as domain users (mscott, dschrute etc.)
-- **Status:** in_progress (VMs installing)
+- [x] Join to lab.local domain ✓
+- [x] Domain user RDP working (mscott, dschrute) ✓
+- **Status:** in_progress
 
 ### Phase 7: Windows Host (Forensic Workstation)
 - [x] Create Windows 11 Pro VM (4GB RAM, 2 vCPU, 60GB disk) — win-forensic

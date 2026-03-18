@@ -528,3 +528,17 @@ The krb5.conf fix above was a real problem but a red herring for this symptom. T
 - Autostart enabled
 - Default login: `kali` / `kali` — **change password before running attack scenarios**
 - **Next:** verify IP, change password, confirm tools (nmap, metasploit, impacket)
+
+### Wazuh agents — all Windows VMs active
+
+| Agent | ID | Status |
+|-------|----|--------|
+| WIN-FORENSIC | 001 | Active |
+| DC01 | 002 | Active |
+| WIN-USER02 | 003 | Active |
+| WIN-USER01 | 004 | Active |
+
+**Gotchas:**
+- wazuh-manager was down (wazuh-apid OOM-killed on Mar 11 boot) — restarted fine, memory was available
+- WIN-USER01 MSI install: `WAZUH_MANAGER` param didn't write to ossec.conf — got `0.0.0.0` instead of `192.168.10.10`. Fix: `(Get-Content ossec.conf) -replace '0\.0\.0\.0','192.168.10.10' | Set-Content ossec.conf`
+- **Next:** Sysmon on all Windows VMs
