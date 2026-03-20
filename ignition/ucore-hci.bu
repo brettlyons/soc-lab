@@ -338,6 +338,32 @@ passwd:
 # ---------------------------------------------------------------------------
 systemd:
   units:
+    # -------------------------------------------------------------------------
+    # autorebase: switch from vanilla Fedora CoreOS -> ucore-hci on first boot
+    #
+    # Ignition runs on the CoreOS live install. This unit fires once, rebases
+    # to ucore-hci:stable, then reboots. All other units below are no-ops until
+    # after that reboot lands on the ucore image.
+    # -------------------------------------------------------------------------
+    - name: ucore-autorebase.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=uCore autorebase to ghcr.io/ublue-os/ucore-hci:stable
+        After=network-online.target
+        Wants=network-online.target
+        ConditionPathExists=!/etc/ucore-autorebase.done
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=rpm-ostree rebase --experimental ostree-image-signed:docker://ghcr.io/ublue-os/ucore-hci:stable
+        ExecStartPost=touch /etc/ucore-autorebase.done
+        ExecStartPost=systemctl reboot
+
+        [Install]
+        WantedBy=multi-user.target
+
     # libvirt monolithic daemon (works on ucore-hci; modular sockets are an alternative)
     - name: libvirtd.service
       enabled: true
