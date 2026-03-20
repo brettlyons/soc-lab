@@ -184,6 +184,180 @@ index=suricata event_type=alert | table _time, src_ip, dest_ip, alert.signature
 
 ---
 
+## Standalone Post: Provisioning a Bare-Metal Hypervisor with Fedora CoreOS + Ignition
+
+**Status:** Ready to write. Process completed and verified.
+**Audience:** Homelabbers / security folks who want a reproducible, cattle-not-pets hypervisor
+**Hook:** One USB drive, three reboots, and a fully configured KVM hypervisor appears — no clicking, no forgetting configs.
+
+### The problem with traditional installs
+
+Every time you reinstall a hypervisor host you go through the same ritual: click through
+the installer, set the hostname, create the user, install packages, copy configs, set up
+libvirt networks, enable services. It works, but it's manual and error-prone. Six months
+later you rebuild and realise you forgot a config you didn't write down.
+
+Fedora CoreOS + Ignition flips this. The machine definition lives in a file in your git
+repo. The USB drive carries that definition. Boot, install, walk away.
+
+### What is Ignition?
+
+Ignition is a first-boot provisioning system built into Fedora CoreOS. Unlike cloud-init
+(which runs on every boot), Ignition runs exactly once — during the initial install — and
+applies your config atomically before the machine is ever handed to you. By the time you
+can SSH in, everything is already in place: users, SSH keys, files, systemd units, the
+works.
+
+The human-editable format is **Butane** (`.bu`) — a clean YAML dialect. You compile it
+to the actual JSON Ignition format (`.ign`) before provisioning.
+
+### What is ucore-hci?
+
+ucore-hci is a Universal Blue image — a custom Fedora CoreOS image that ships with
+KVM/libvirt, Podman, and Cockpit pre-installed. It's purpose-built for bare-metal
+hypervisor duty. No extra packages needed; you boot into a machine that already knows
+how to run VMs.
+
+Because CoreOS uses `rpm-ostree` (immutable base image), you can't just `dnf install`
+things at will. ucore-hci solves this by baking the right packages into the image itself.
+For anything else — host-side services like Suricata — you run Podman containers instead
+of layering packages.
+
+### The autorebase two-step
+
+ucore-hci doesn't have its own ISO. You boot the standard Fedora CoreOS live ISO and
+let two systemd oneshot services handle the image swap:
+
+1. **Boot 1** (vanilla CoreOS): `ucore-unsigned-autorebase.service` fires, rebases to
+   `ostree-unverified-registry:ghcr.io/ublue-os/ucore-hci:stable`, creates a sentinel
+   file, disables itself, reboots.
+2. **Boot 2** (unsigned ucore): `ucore-signed-autorebase.service` fires, rebases to
+   `ostree-image-signed:docker://ghcr.io/ublue-os/ucore-hci:stable` (cosign-verified),
+   creates its sentinel, disables itself, reboots.
+3. **Boot 3+**: Both sentinel files exist, neither service fires — normal operation.
+
+The sentinel pattern (`ConditionPathExists=!/etc/ucore-autorebase/unverified` etc.)
+comes directly from the official ublue-os/ucore examples. Don't invent your own
+guard logic here — the official pattern is what it is for good reason.
+
+### What goes in the Ignition config
+
+The full config lives at `ignition/ucore-hci.bu` in this repo. Key sections:
+
+- **Users + SSH key** — blyons account, wheel/libvirt/kvm groups, passwordless sudo
+- **NetworkManager unmanaged config** — prevents NM from grabbing virbr* at boot
+  (a real gotcha: NM will steal virbr0 before libvirt can claim it, breaking the
+  default NAT network on every reboot — learned the hard way on aurora, baked in here)
+- **systemd-resolved stub zone** — routes `*.lab.local` queries to fw-router dnsmasq
+- **Kerberos LAB realm config** — so xfreerdp NLA works with domain accounts out of the box
+- **libvirt network XML** — lab-net definition dropped into /etc/soc-lab/ for first-boot script
+- **Podman Quadlet units** — Suricata Tier 2 + rsyslog EVE forwarder, auto-start via systemd
+- **soc-lab-first-boot.service** — one-shot: defines libvirt networks, DHCP reservation, storage pool
+- **soc-lab-routes.service** — adds 192.168.10.0/24 + 192.168.40.0/24 routes via fw-router after virtnetworkd starts
+- **Nightly shutdown timer** — powers off at 21:00, rtcwake programs RTC alarm for 08:00
+
+### Embedding Ignition into the live ISO
+
+The live ISO shell has no SSH keys to pull files from another machine. The clean
+solution: embed the `.ign` file directly into the ISO using `coreos-installer`.
+Then the USB is fully self-contained — no network, no key exchange needed.
+
+```bash
+# 1. Compile Butane → Ignition (use Podman since Aurora is image-based)
+podman run --rm -i quay.io/coreos/butane:release \
+  --strict < ignition/ucore-hci.bu > ignition/ucore-hci.ign
+
+# 2. Embed into a working copy of the ISO
+cp ~/Downloads/fedora-coreos-*-live.x86_64.iso ~/Downloads/fedora-coreos-lefthand.iso
+
+podman run --rm \
+  -v ~/Downloads:/data:z \
+  -v $(pwd)/ignition:/ign:z \
+  quay.io/coreos/coreos-installer:release \
+  iso ignition embed /data/fedora-coreos-lefthand.iso \
+  --ignition-file /ign/ucore-hci.ign
+
+# 3. Verify the embed before writing to USB
+podman run --rm \
+  -v ~/Downloads:/data:z \
+  quay.io/coreos/coreos-installer:release \
+  iso ignition show /data/fedora-coreos-lefthand.iso | python3 -m json.tool > /dev/null \
+  && echo "Valid JSON" || echo "INVALID — do not write to USB"
+
+# 4. Write to USB
+sudo dd if=~/Downloads/fedora-coreos-lefthand.iso of=/dev/sdX bs=4M status=progress oflag=sync
+```
+
+Note: `coreos-installer iso ignition embed` modifies a file, not a block device. Work
+on the ISO file, then verify, then `dd` to USB — not the other way around.
+
+### The install
+
+The live ISO requires *some* Ignition config to boot — without one,
+`ignition-fetch-offline.service` fails and pulls the system into emergency mode.
+The fix: serve a minimal config just to get the live environment up, then run
+`coreos-installer` from there with the real config.
+
+**Step 1 — serve two configs from aurora:**
+```bash
+cd /var/home/blyons/workspace/soc-lab/ignition
+python3 -m http.server 8080
+```
+
+`live-boot.ign` — minimal config, just adds your SSH key to the `core` user:
+```json
+{"ignition":{"version":"3.4.0"},"passwd":{"users":[{"name":"core","sshAuthorizedKeys":["YOUR_SSH_PUBKEY"]}]}}
+```
+
+**Step 2 — at the GRUB menu on the target machine, press `e` and add:**
+```
+ignition.config.url=http://<aurora-ip>:8080/live-boot.ign
+```
+`Ctrl+X` to boot. The live environment comes up and your SSH key is authorised.
+
+**Step 3 — SSH in from aurora and run the installer:**
+```bash
+ssh core@<lefthand-ip>
+lsblk   # confirm disk name
+sudo coreos-installer install /dev/nvme0n1 \
+  --ignition-url http://<aurora-ip>:8080/ucore-hci.ign \
+  --insecure-ignition
+```
+
+`--insecure-ignition` is required when fetching over plain HTTP (not HTTPS).
+The installer writes CoreOS + your ignition config to disk and exits cleanly.
+
+**Step 4 — reboot, remove USB.** Three automatic reboots for the ucore-hci
+autorebase, then the machine is fully provisioned.
+
+Three boots later: fully provisioned ucore-hci hypervisor, all lab services running.
+
+### Why this matters for a SOC lab
+
+The hypervisor is the most tedious machine to rebuild. Every config detail that lives
+only in your head is technical debt. Ignition moves that debt into a git repo. When
+(not if) the hardware dies or gets wiped, recovery is: compile, embed, boot. The VMs
+come back via rsync from a backup. No tribal knowledge required.
+
+### Gotchas
+
+- `.ign` files are JSON and contain your SSH pubkey in plaintext — gitignore them if
+  your repo is public. The `.bu` source (no secrets) is what you commit.
+- SecureBoot: if the machine has it enabled, you'll need to enroll the ublue-os MOK key
+  after the first successful boot (`sudo mokutil --import /etc/pki/akmods/certs/akmods-ublue.der`).
+  Easiest to just disable SecureBoot in BIOS on a lab machine.
+- `--bypass-driver` flag in the rebase commands: required because rpm-ostree's default
+  driver detection can fail on first boot before the image is fully settled.
+- **Don't use `2>&1` when compiling Butane.** `podman run ... > ucore-hci.ign 2>&1` mixes
+  podman's image pull progress messages into the output file. The `.ign` ends up starting
+  with `Trying to pull...` instead of `{`, and Ignition fails with "invalid character T
+  at line 1 col 2". Always redirect only stdout: `> ucore-hci.ign` with no `2>&1`.
+- The `sleep 8` in `soc-lab-routes.service`: virtnetworkd.service reports active before
+  virbr0 is actually up. Without the sleep, `ip route replace` races and loses.
+  Ugly but reliable.
+
+---
+
 ## Post 5: Log Analysis — Splunk
 
 ### Setup notes (in progress)

@@ -262,6 +262,32 @@
 - **Next:** Phase 6 (Windows DC) or Phase 9 (Kali)
 - **Next:** Blog post write-up, then Phase 6 (Windows DC) or Phase 9 (Kali)
 
+## Session 16: 2026-03-20
+
+### lefthand — ucore-hci bare metal install
+
+- Butane config complete: `ignition/ucore-hci.bu` (hostname lefthand, blyons user, libvirt, Suricata Tier 2, soc-lab services)
+- Two-step autorebase pattern (unsigned → signed) matches official ublue-os/ucore example
+- CoreOS successfully installed to `/dev/nvme0n1` (3.7T TS4TMTE720TI-AST NVMe)
+- lefthand IP on LAN: `172.16.1.114`
+
+**Gotchas learned the hard way:**
+- `2>&1` on butane compile redirects podman pull messages into the .ign file — always use `> file.ign` with no `2>&1`
+- `coreos-installer iso ignition embed` works on a file, not a block device — embed first, then `dd`
+- The live ISO requires *some* ignition config — without one, `ignition-fetch-offline.service` fails → emergency mode
+- Fix: serve a minimal `live-boot.ign` (just SSH key for `core` user) via HTTP, pass via `ignition.config.url` at GRUB
+- Then SSH in and run `coreos-installer install /dev/nvme0n1 --ignition-url http://... --insecure-ignition`
+- `--insecure-ignition` required for plain HTTP URLs
+- BIOS RTC wake (7:00 AM) used instead of `rtcwake` script — more reliable
+
+**Status:** CoreOS installed, autorebase reboots in progress (3 boots to fully provisioned ucore-hci)
+
+**Next session:**
+- Verify lefthand booted into ucore-hci (SSH as blyons, check `rpm-ostree status`)
+- Copy fw-router SSH key: `scp ~/.ssh/fw-router-key lefthand:~/.ssh/fw-router-key`
+- Rsync VM images from aurora: `rsync -av /var/lib/libvirt/images/soc-lab/ lefthand:/var/lib/libvirt/images/soc-lab/`
+- Import and start VMs on lefthand
+
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
