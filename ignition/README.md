@@ -19,7 +19,9 @@ butane --strict ucore-hci.bu -o ucore-hci.ign
 
 ## Install on bare metal
 
-Boot the ucore-hci live ISO (or any Fedora CoreOS live ISO), then:
+ucore-hci has no ISO of its own. Boot the Fedora CoreOS live ISO, install
+CoreOS with this Ignition file, and the autorebase units handle the rest
+(two reboots to land on the signed ucore-hci image).
 
 ```bash
 # Identify your disk
@@ -28,19 +30,23 @@ lsblk
 # Install — adapt /dev/nvme0n1 to your disk
 sudo coreos-installer install /dev/nvme0n1 --ignition-file ucore-hci.ign
 
-# Reboot into the installed system
-sudo reboot
+# Reboot — Boot 1: rebases to ucore-hci unsigned, reboots automatically
+# Boot 2: rebases to signed image, reboots automatically
+# Boot 3: fully provisioned ucore-hci, all lab services start
 ```
 
-## Alternatively: rebase from Fedora CoreOS
+## SecureBoot warning
 
-Boot vanilla Fedora CoreOS with the Ignition file, then rebase:
+If the machine has SecureBoot enabled, import the ublue-os MOK key after
+the first successful boot or subsequent boots will fail:
 
 ```bash
-sudo rpm-ostree rebase --experimental \
-  ostree-unverified-registry:ghcr.io/ublue-os/ucore-hci:stable-zfs
-sudo systemctl reboot
+sudo mokutil --import /etc/pki/akmods/certs/akmods-ublue.der
+# Enter a temporary password when prompted, then reboot and enroll the key in MOK manager
 ```
+
+Check BIOS → Secure Boot settings. Easiest to disable SecureBoot on a lab
+machine if you don't need it.
 
 ## After first boot
 

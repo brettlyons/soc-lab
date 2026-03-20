@@ -319,6 +319,10 @@ storage:
     - path: /etc/soc-lab
       mode: 0755
 
+    # Autorebase sentinel directory (matches ublue-os/ucore official example)
+    - path: /etc/ucore-autorebase
+      mode: 0754
+
 # ---------------------------------------------------------------------------
 # Users
 # ---------------------------------------------------------------------------
@@ -341,25 +345,49 @@ systemd:
     # -------------------------------------------------------------------------
     # autorebase: switch from vanilla Fedora CoreOS -> ucore-hci on first boot
     #
-    # Ignition runs on the CoreOS live install. This unit fires once, rebases
-    # to ucore-hci:stable, then reboots. All other units below are no-ops until
-    # after that reboot lands on the ucore image.
+    # Two-step process (matches ublue-os/ucore official example):
+    #   Boot 1: rebase to unsigned registry (pulls image, creates sentinel)
+    #   Boot 2: rebase to signed registry (verifies image, creates sentinel)
+    #   Boot 3+: both conditions met, neither service runs — normal operation
     # -------------------------------------------------------------------------
-    - name: ucore-autorebase.service
+    - name: ucore-unsigned-autorebase.service
       enabled: true
       contents: |
         [Unit]
-        Description=uCore autorebase to ghcr.io/ublue-os/ucore-hci:stable
+        Description=uCore autorebase to unsigned OCI and reboot
+        ConditionPathExists=!/etc/ucore-autorebase/unverified
+        ConditionPathExists=!/etc/ucore-autorebase/signed
         After=network-online.target
         Wants=network-online.target
-        ConditionPathExists=!/etc/ucore-autorebase.done
 
         [Service]
         Type=oneshot
-        RemainAfterExit=yes
-        ExecStart=rpm-ostree rebase --experimental ostree-image-signed:docker://ghcr.io/ublue-os/ucore-hci:stable
-        ExecStartPost=touch /etc/ucore-autorebase.done
-        ExecStartPost=systemctl reboot
+        StandardOutput=journal+console
+        ExecStart=/usr/bin/rpm-ostree rebase --bypass-driver ostree-unverified-registry:ghcr.io/ublue-os/ucore-hci:stable
+        ExecStart=/usr/bin/touch /etc/ucore-autorebase/unverified
+        ExecStart=/usr/bin/systemctl disable ucore-unsigned-autorebase.service
+        ExecStart=/usr/bin/systemctl reboot
+
+        [Install]
+        WantedBy=multi-user.target
+
+    - name: ucore-signed-autorebase.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=uCore autorebase to signed OCI and reboot
+        ConditionPathExists=/etc/ucore-autorebase/unverified
+        ConditionPathExists=!/etc/ucore-autorebase/signed
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        Type=oneshot
+        StandardOutput=journal+console
+        ExecStart=/usr/bin/rpm-ostree rebase --bypass-driver ostree-image-signed:docker://ghcr.io/ublue-os/ucore-hci:stable
+        ExecStart=/usr/bin/touch /etc/ucore-autorebase/signed
+        ExecStart=/usr/bin/systemctl disable ucore-signed-autorebase.service
+        ExecStart=/usr/bin/systemctl reboot
 
         [Install]
         WantedBy=multi-user.target
