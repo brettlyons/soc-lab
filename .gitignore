@@ -1,3 +1,6 @@
 isos/
 *.iso
 *-seed.iso
+
+# Compiled Ignition JSON — regenerate from .bu before installing
+ignition/*.ign

@@ -1,0 +1,426 @@
+variant: fcos
+version: 1.5.0
+
+# ucore-hci Butane config — SOC Lab hypervisor
+#
+# TARGET: Universal Blue ucore-hci image (Fedora CoreOS + KVM/libvirt + Podman + cockpit)
+#
+# COMPILE:
+#   butane --strict ucore-hci.bu -o ucore-hci.ign
+#
+# INSTALL (bare metal):
+#   # Boot CoreOS live ISO, then:
+#   coreos-installer install /dev/nvme0n1 --ignition-file ucore-hci.ign
+#   # Adapt /dev/nvme0n1 to your actual disk (nvme0n1, sda, etc.)
+#
+# BEFORE FIRST BOOT — add your fw-router SSH private key:
+#   The fw-router-key private key is NOT embedded here (plaintext Ignition = not safe for secrets).
+#   After first boot, copy it from aurora:
+#     scp ~/.ssh/fw-router-key lefthand:~/.ssh/fw-router-key
+#     chmod 600 ~/.ssh/fw-router-key
+#
+# POST-FIRST-BOOT checklist (after soc-lab-first-boot.service runs):
+#   1. Copy fw-router-key private key (see above)
+#   2. Copy VM disk images to /var/lib/libvirt/images/soc-lab/
+#   3. Import VM definitions:  virsh --connect qemu:///system define <vm>.xml
+#   4. Enable VM autostart:   virsh --connect qemu:///system autostart <vm>
+#   5. Start VMs:             virsh --connect qemu:///system start fw-router
+
+# ---------------------------------------------------------------------------
+# Hostname — change to whatever you name the box
+# ---------------------------------------------------------------------------
+storage:
+  files:
+    - path: /etc/hostname
+      mode: 0644
+      contents:
+        inline: |
+          lefthand
+
+    # -------------------------------------------------------------------------
+    # Passwordless sudo for wheel group
+    # -------------------------------------------------------------------------
+    - path: /etc/sudoers.d/wheel-nopasswd
+      mode: 0440
+      contents:
+        inline: |
+          %wheel ALL=(ALL) NOPASSWD: ALL
+
+    # -------------------------------------------------------------------------
+    # NetworkManager: leave libvirt bridge interfaces alone
+    #
+    # Without this, NM grabs virbr0 at boot and blocks libvirt from starting
+    # the default network. Same fix as aurora (Session 6).
+    # -------------------------------------------------------------------------
+    - path: /etc/NetworkManager/conf.d/unmanaged-libvirt.conf
+      mode: 0644
+      contents:
+        inline: |
+          [keyfile]
+          unmanaged-devices=interface-name:virbr*,interface-name:vnet*,interface-name:veth*
+
+    # -------------------------------------------------------------------------
+    # systemd-resolved: lab.local stub zone
+    #
+    # Routes *.lab.local queries to fw-router dnsmasq (192.168.122.10 = fw-router
+    # WAN IP on the default libvirt NAT network).
+    # -------------------------------------------------------------------------
+    - path: /etc/systemd/resolved.conf.d/lab-local.conf
+      mode: 0644
+      contents:
+        inline: |
+          [Resolve]
+          DNS=192.168.122.10
+          Domains=~lab.local
+
+    # -------------------------------------------------------------------------
+    # Kerberos: LAB realm config
+    #
+    # Needed for xfreerdp NLA with domain accounts (LAB\mscott, LAB\dschrute)
+    # and any tooling that authenticates against DC01. Learned fix from Session 15.
+    # -------------------------------------------------------------------------
+    - path: /etc/krb5.conf.d/lab-local.conf
+      mode: 0644
+      contents:
+        inline: |
+          [libdefaults]
+              default_realm = LAB
+
+          [realms]
+              LAB = {
+                  kdc = 192.168.10.20
+                  admin_server = 192.168.10.20
+              }
+
+          [domain_realm]
+              .lab.local = LAB
+              lab.local = LAB
+
+    # -------------------------------------------------------------------------
+    # libvirt: lab-net network definition
+    #
+    # Pure L2 bridge (virbr-lab). No libvirt DHCP — fw-router dnsmasq handles
+    # DHCP/DNS for the 192.168.10.0/24 segment. fw-router (.1) is the gateway.
+    # Host reaches lab VMs via the route added by soc-lab-routes.service:
+    #   192.168.10.0/24 via 192.168.122.10 dev virbr0
+    # -------------------------------------------------------------------------
+    - path: /etc/soc-lab/lab-net.xml
+      mode: 0644
+      contents:
+        inline: |
+          <network>
+            <name>lab-net</name>
+            <bridge name='virbr-lab' stp='on' delay='0'/>
+            <forward mode='none'/>
+          </network>
+
+    # -------------------------------------------------------------------------
+    # Suricata Tier 2: rsyslog forwarder config
+    #
+    # Tails /var/log/suricata/internal/eve.json and dual-forwards to:
+    #   Wazuh TCP :514   (facility local4)
+    #   Splunk TCP :5514
+    # -------------------------------------------------------------------------
+    - path: /etc/rsyslog-suricata/rsyslog.conf
+      mode: 0644
+      contents:
+        inline: |
+          # Tier 2 Suricata EVE → Wazuh + Splunk forwarder
+          global(workDirectory="/work")
+
+          module(load="imfile" PollingInterval="5")
+
+          input(type="imfile"
+                File="/var/log/suricata/eve.json"
+                Tag="suricata-eve-internal"
+                Severity="info"
+                Facility="local4"
+                PersistStateInterval="10"
+                ReadMode="0"
+                FreshStartTail="on"
+                StateFile="suricata-eve-internal")
+
+          if $syslogfacility-text == 'local4' then {
+              action(type="omfwd"
+                     Target="192.168.10.10"
+                     Port="514"
+                     Protocol="tcp"
+                     Template="RSYSLOG_SyslogProtocol23Format")
+              action(type="omfwd"
+                     Target="192.168.10.40"
+                     Port="5514"
+                     Protocol="tcp"
+                     Template="RSYSLOG_SyslogProtocol23Format")
+              stop
+          }
+
+    # -------------------------------------------------------------------------
+    # Podman Quadlet: Suricata Tier 2 — Internal NIDS on virbr-lab
+    # -------------------------------------------------------------------------
+    - path: /etc/containers/systemd/suricata-internal.container
+      mode: 0644
+      contents:
+        inline: |
+          [Unit]
+          Description=Suricata Tier 2 — Internal NIDS on virbr-lab
+          After=network.target virtnetworkd.service
+          Wants=virtnetworkd.service
+
+          [Container]
+          Image=docker.io/jasonish/suricata:latest
+          ContainerName=suricata-internal
+          Network=host
+          AddCapability=NET_ADMIN
+          AddCapability=NET_RAW
+          AddCapability=SYS_NICE
+
+          Volume=/etc/suricata-internal:/etc/suricata:z
+          Volume=/var/lib/suricata-internal:/var/lib/suricata:z
+          Volume=/var/log/suricata/internal:/var/log/suricata:z
+
+          Exec=-i virbr-lab
+
+          [Service]
+          Restart=on-failure
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+
+    # -------------------------------------------------------------------------
+    # Podman Quadlet: rsyslog EVE forwarder
+    # -------------------------------------------------------------------------
+    - path: /etc/containers/systemd/rsyslog-suricata.container
+      mode: 0644
+      contents:
+        inline: |
+          [Unit]
+          Description=rsyslog — Tier 2 Suricata EVE forwarder to Wazuh + Splunk
+          After=suricata-internal.service
+          Wants=suricata-internal.service
+
+          [Container]
+          Image=docker.io/rsyslog/syslog_appliance_alpine:latest
+          ContainerName=rsyslog-suricata
+          Network=host
+
+          Volume=/etc/rsyslog-suricata/rsyslog.conf:/etc/rsyslog.conf:ro,z
+          Volume=/var/log/suricata/internal:/var/log/suricata:ro,z
+          Volume=/var/lib/rsyslog-suricata:/work:z
+
+          Exec=rsyslog
+
+          [Service]
+          Restart=on-failure
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+
+    # -------------------------------------------------------------------------
+    # Nightly shutdown + RTC wake script
+    #
+    # Programs the RTC alarm to wake the machine at 08:00 the next morning,
+    # then powers off. rtcwake --mode no sets the alarm without suspending —
+    # the subsequent systemctl poweroff does the actual shutdown.
+    #
+    # REQUIREMENT: BIOS/UEFI must have "Wake on RTC" / "Resume by Alarm" enabled.
+    #   Check your compact PC's BIOS under Power Management settings.
+    # -------------------------------------------------------------------------
+    - path: /usr/local/sbin/soc-lab-nightly-shutdown.sh
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          set -euo pipefail
+
+          WAKE_TIME=$(date +%s -d "tomorrow 08:00")
+          WAKE_HUMAN=$(date -d "tomorrow 08:00" '+%Y-%m-%d %H:%M:%S')
+
+          echo "=== SOC Lab: Nightly shutdown ==="
+          echo "Setting RTC wake alarm for ${WAKE_HUMAN} (unix: ${WAKE_TIME})"
+
+          # Program RTC alarm — mode 'no' means set and return, don't suspend
+          rtcwake --mode no --time "${WAKE_TIME}"
+          echo "RTC alarm set. Powering off..."
+
+          systemctl poweroff
+
+    # -------------------------------------------------------------------------
+    # First-boot setup script
+    #
+    # Defines libvirt networks, DHCP reservation, and storage pool.
+    # Runs once (guarded by ConditionPathExists on the .done sentinel file).
+    # -------------------------------------------------------------------------
+    - path: /usr/local/sbin/soc-lab-first-boot.sh
+      mode: 0755
+      contents:
+        inline: |
+          #!/bin/bash
+          set -euo pipefail
+
+          echo "=== SOC Lab: First Boot Setup ==="
+
+          # --- 1. Default (NAT) network ---
+          echo "[1/4] Ensuring default libvirt network is active..."
+          virsh --connect qemu:///system net-autostart default || true
+          virsh --connect qemu:///system net-start default 2>/dev/null \
+              && echo "      default network started" \
+              || echo "      default network already running"
+
+          # --- 2. lab-net ---
+          echo "[2/4] Defining lab-net virtual network (virbr-lab, 192.168.10.0/24)..."
+          virsh --connect qemu:///system net-define /etc/soc-lab/lab-net.xml
+          virsh --connect qemu:///system net-autostart lab-net
+          virsh --connect qemu:///system net-start lab-net
+          echo "      lab-net defined and started"
+
+          # --- 3. Reserve fw-router WAN IP ---
+          echo "[3/4] Reserving fw-router DHCP address (MAC 52:54:00:ca:03:ea -> 192.168.122.10)..."
+          virsh --connect qemu:///system net-update default add ip-dhcp-host \
+              '<host mac="52:54:00:ca:03:ea" name="fw-router" ip="192.168.122.10"/>' \
+              --live --config
+          echo "      Reserved: 52:54:00:ca:03:ea -> 192.168.122.10"
+
+          # --- 4. Storage pool ---
+          echo "[4/4] Creating soc-lab libvirt storage pool..."
+          virsh --connect qemu:///system pool-define-as soc-lab dir \
+              --target /var/lib/libvirt/images/soc-lab
+          virsh --connect qemu:///system pool-autostart soc-lab
+          virsh --connect qemu:///system pool-start soc-lab
+          echo "      Storage pool: soc-lab -> /var/lib/libvirt/images/soc-lab"
+
+          touch /var/lib/soc-lab-first-boot.done
+
+          echo ""
+          echo "=== First boot complete. Next steps: ==="
+          echo "  scp aurora:~/.ssh/fw-router-key ~/.ssh/fw-router-key && chmod 600 ~/.ssh/fw-router-key"
+          echo "  rsync -av aurora:/var/lib/libvirt/images/soc-lab/ /var/lib/libvirt/images/soc-lab/"
+          echo "  # then define + start VMs"
+
+  directories:
+    # Storage pool target — pre-create so the pool definition works
+    - path: /var/lib/libvirt/images/soc-lab
+      mode: 0711
+
+    # Suricata Tier 2 volumes
+    - path: /etc/suricata-internal
+      mode: 0755
+    - path: /var/lib/suricata-internal
+      mode: 0755
+    - path: /var/log/suricata/internal
+      mode: 0755
+
+    # rsyslog forwarder working directory
+    - path: /var/lib/rsyslog-suricata
+      mode: 0755
+
+    # First-boot support files
+    - path: /etc/soc-lab
+      mode: 0755
+
+# ---------------------------------------------------------------------------
+# Users
+# ---------------------------------------------------------------------------
+passwd:
+  users:
+    - name: blyons
+      uid: 1000
+      groups:
+        - wheel
+        - libvirt
+        - kvm
+      ssh_authorized_keys:
+        - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICNyK0e6k0fOGbwGWi3Yg03Cg31OPgkIjA4ZKdc+rLIy blyons@fastmail.com"
+
+# ---------------------------------------------------------------------------
+# Systemd units
+# ---------------------------------------------------------------------------
+systemd:
+  units:
+    # libvirt monolithic daemon (works on ucore-hci; modular sockets are an alternative)
+    - name: libvirtd.service
+      enabled: true
+
+    # virtnetworkd needed for net-update and net-start commands
+    - name: virtnetworkd.service
+      enabled: true
+
+    # Cockpit web console — https://forge:9090
+    - name: cockpit.socket
+      enabled: true
+
+    # -------------------------------------------------------------------------
+    # soc-lab-routes: add lab network routes after virtnetworkd brings up virbr0
+    #
+    # Routes 192.168.10.0/24 and 192.168.40.0/24 via fw-router WAN IP so the
+    # hypervisor host can reach lab VMs. NM dispatcher won't fire for virbr*
+    # (unmanaged), so a systemd oneshot is used instead (same as aurora).
+    # -------------------------------------------------------------------------
+    - name: soc-lab-routes.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=SOC Lab — Add lab network routes to hypervisor
+        After=virtnetworkd.service
+        Wants=virtnetworkd.service
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStartPre=/bin/sleep 8
+        ExecStart=/sbin/ip route replace 192.168.10.0/24 via 192.168.122.10 dev virbr0
+        ExecStart=/sbin/ip route replace 192.168.40.0/24 via 192.168.122.10 dev virbr0
+
+        [Install]
+        WantedBy=multi-user.target
+
+    # -------------------------------------------------------------------------
+    # soc-lab-first-boot: one-shot libvirt setup
+    #
+    # Runs once after libvirtd is ready. Guarded by ConditionPathExists so
+    # it's a no-op on subsequent boots.
+    # -------------------------------------------------------------------------
+    - name: soc-lab-first-boot.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=SOC Lab — First boot libvirt network + storage pool setup
+        After=libvirtd.service virtnetworkd.service
+        Requires=libvirtd.service
+        ConditionPathExists=!/var/lib/soc-lab-first-boot.done
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/local/sbin/soc-lab-first-boot.sh
+
+        [Install]
+        WantedBy=multi-user.target
+
+    # -------------------------------------------------------------------------
+    # soc-lab-shutdown: nightly poweroff at 21:00 with RTC wake set for 08:00
+    #
+    # NOTE: requires BIOS/UEFI "Wake on RTC" / "Resume by Alarm" enabled.
+    # -------------------------------------------------------------------------
+    - name: soc-lab-shutdown.timer
+      enabled: true
+      contents: |
+        [Unit]
+        Description=SOC Lab — Nightly shutdown at 21:00
+
+        [Timer]
+        OnCalendar=*-*-* 21:00:00
+        Persistent=true
+
+        [Install]
+        WantedBy=timers.target
+
+    - name: soc-lab-shutdown.service
+      contents: |
+        [Unit]
+        Description=SOC Lab — Set RTC wake alarm and power off
+
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/sbin/soc-lab-nightly-shutdown.sh
