@@ -318,6 +318,42 @@
 - Rsync VM images from aurora: `rsync -av /var/lib/libvirt/images/soc-lab/ lefthand:/var/lib/libvirt/images/soc-lab/`
 - Import and start VMs on lefthand
 
+## Session 18: 2026-03-21
+
+### VM migration aurora → lefthand — complete
+
+**Rsync resume:**
+- Previous rsync was cut off by a hard reboot mid-transfer
+- Resumed with `sudo rsync -av --partial --append-verify -e "ssh -i ~/.ssh/id_ed25519" --rsync-path="sudo rsync"`
+- 3 files (kali, splunk, wazuh) failed `--append-verify` on first pass (partial bytes didn't match), retried and verified clean
+- win-user01, win-user02 were missing entirely — transferred fresh
+- All 10 files match source sizes on lefthand ✓
+
+**Gotchas:**
+- `sudo rsync` loses the user's SSH key — must pass `-e "ssh -i /home/blyons/.ssh/id_ed25519"` explicitly
+- wazuh and splunk VMs had seed ISOs still attached in their XML — ejected with `virsh change-media --eject --config` before starting
+- fw-router SSH key not copied to lefthand (intentional — fw-router managed from aurora)
+
+**VM import:**
+- All 8 VMs defined on lefthand via `virsh dumpxml | ssh ... virsh define /dev/stdin`
+- Networks (default, lab-net) and soc-lab storage pool already provisioned by soc-lab-first-boot.service
+- fw-router DHCP reservation (MAC 52:54:00:ca:03:ea → 192.168.122.10) confirmed present in lefthand default network XML
+
+**Running on lefthand:** fw-router, wazuh, splunk, kali
+**Shut off (defined, not started):** dc01, win-forensic, win-user01, win-user02
+
+**Health check:**
+| Check | Result |
+|-------|--------|
+| fw-router running | ✓ |
+| wazuh (192.168.10.10) reachable | ✓ |
+| splunk (192.168.10.40) reachable | ✓ |
+| kali running | ✓ |
+| routes (10.0/24, 40.0/24) via soc-lab-routes.service | ✓ |
+| Wazuh dashboard https://192.168.10.10 | ✓ (302) |
+
+**Next:** Decide whether aurora or lefthand is primary going forward; start Windows VMs on lefthand as needed.
+
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|

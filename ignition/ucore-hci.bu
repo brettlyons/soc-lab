@@ -234,8 +234,8 @@ storage:
           #!/bin/bash
           set -euo pipefail
 
-          WAKE_TIME=$(date +%s -d "tomorrow 08:00")
-          WAKE_HUMAN=$(date -d "tomorrow 08:00" '+%Y-%m-%d %H:%M:%S')
+          WAKE_TIME=$(TZ=America/Denver date +%s -d "tomorrow 08:00")
+          WAKE_HUMAN=$(TZ=America/Denver date -d "tomorrow 08:00" '+%Y-%m-%d %H:%M:%S %Z')
 
           echo "=== SOC Lab: Nightly shutdown ==="
           echo "Setting RTC wake alarm for ${WAKE_HUMAN} (unix: ${WAKE_TIME})"
@@ -470,10 +470,10 @@ systemd:
       enabled: true
       contents: |
         [Unit]
-        Description=SOC Lab — Nightly shutdown at 21:00
+        Description=SOC Lab — Nightly shutdown at 21:00 Mountain Time
 
         [Timer]
-        OnCalendar=*-*-* 21:00:00
+        OnCalendar=*-*-* 21:00:00 America/Denver
 
         [Install]
         WantedBy=timers.target
