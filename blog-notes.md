@@ -258,45 +258,55 @@ The full config lives at `ignition/ucore-hci.bu` in this repo. Key sections:
 
 ### Embedding Ignition into the live ISO
 
-The live ISO shell has no SSH keys to pull files from another machine. The clean
-solution: embed the `.ign` file directly into the ISO using `coreos-installer`.
-Then the USB is fully self-contained — no network, no key exchange needed.
+There are two approaches, depending on how much you want the USB to do on its own.
+
+---
+
+#### Approach A: `iso customize` — fully automated (recommended)
+
+`coreos-installer iso customize` lets you bake both the ignition config *and* the
+target install disk into the ISO. Booting the USB installs CoreOS automatically and
+powers off — no manual steps, no network required.
 
 ```bash
-# 1. Compile Butane → Ignition (use Podman since Aurora is image-based)
+# 1. Compile Butane → Ignition
 podman run --rm -i quay.io/coreos/butane:release \
   --strict < ignition/ucore-hci.bu > ignition/ucore-hci.ign
 
-# 2. Embed into a working copy of the ISO
+# 2. Customize the ISO — bakes in config + target disk
 cp ~/Downloads/fedora-coreos-*-live.x86_64.iso ~/Downloads/fedora-coreos-lefthand.iso
 
 podman run --rm \
   -v ~/Downloads:/data:z \
   -v $(pwd)/ignition:/ign:z \
   quay.io/coreos/coreos-installer:release \
-  iso ignition embed /data/fedora-coreos-lefthand.iso \
-  --ignition-file /ign/ucore-hci.ign
+  iso customize \
+  --dest-ignition /ign/ucore-hci.ign \
+  --dest-device /dev/nvme0n1 \
+  /data/fedora-coreos-lefthand.iso
 
-# 3. Verify the embed before writing to USB
-podman run --rm \
-  -v ~/Downloads:/data:z \
-  quay.io/coreos/coreos-installer:release \
-  iso ignition show /data/fedora-coreos-lefthand.iso | python3 -m json.tool > /dev/null \
-  && echo "Valid JSON" || echo "INVALID — do not write to USB"
-
-# 4. Write to USB
+# 3. Write to USB
 sudo dd if=~/Downloads/fedora-coreos-lefthand.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
-Note: `coreos-installer iso ignition embed` modifies a file, not a block device. Work
-on the ISO file, then verify, then `dd` to USB — not the other way around.
+Boot the USB → CoreOS installs itself to `/dev/nvme0n1` with your config → machine
+powers off. Remove USB, power on, wait for the three ucore-hci autorebase boots.
+Done.
 
-### The install
+**Caveat:** `--dest-device` must match the actual disk on the target machine. Verify
+with `lsblk` if unsure. Wrong device = wrong disk gets wiped.
+
+---
+
+#### Approach B: `iso ignition embed` + manual install (fallback)
+
+Use this if you need to confirm the disk device first, or want to run the installer
+interactively.
 
 The live ISO requires *some* Ignition config to boot — without one,
 `ignition-fetch-offline.service` fails and pulls the system into emergency mode.
-The fix: serve a minimal config just to get the live environment up, then run
-`coreos-installer` from there with the real config.
+Use a minimal `live-boot.ign` (just your SSH key) for the live environment, then
+pass the real config to `coreos-installer install`.
 
 **Step 1 — serve two configs from aurora:**
 ```bash
@@ -325,10 +335,14 @@ sudo coreos-installer install /dev/nvme0n1 \
 ```
 
 `--insecure-ignition` is required when fetching over plain HTTP (not HTTPS).
-The installer writes CoreOS + your ignition config to disk and exits cleanly.
 
-**Step 4 — reboot, remove USB.** Three automatic reboots for the ucore-hci
-autorebase, then the machine is fully provisioned.
+**Step 4 — reboot, remove USB.**
+
+---
+
+Note: both `iso ignition embed` and `iso customize` modify a file, not a block
+device. Always work on the ISO file, verify, then `dd` to USB — not the other way
+around.
 
 Three boots later: fully provisioned ucore-hci hypervisor, all lab services running.
 
@@ -348,6 +362,14 @@ come back via rsync from a backup. No tribal knowledge required.
   Easiest to just disable SecureBoot in BIOS on a lab machine.
 - `--bypass-driver` flag in the rebase commands: required because rpm-ostree's default
   driver detection can fail on first boot before the image is fully settled.
+- **Don't specify `uid` for users.** The `core` user already owns UID 1000 on Fedora
+  CoreOS. Specifying `uid: 1000` for a second user fails with `useradd: UID 1000 is not
+  unique` (exit status 4). Remove the `uid` field entirely — let the system assign one.
+- **Don't add groups that don't exist on vanilla CoreOS.** Ignition runs on first boot
+  *before* the autorebase to ucore-hci. If your user definition includes groups like
+  `libvirt` or `kvm`, `useradd` will fail with exit status 6 ("group does not exist")
+  and Ignition aborts. Only include groups that exist on base CoreOS (e.g. `wheel`).
+  The ucore-hci-specific groups can be added after the autorebase completes if needed.
 - **Don't use `2>&1` when compiling Butane.** `podman run ... > ucore-hci.ign 2>&1` mixes
   podman's image pull progress messages into the output file. The `.ign` ends up starting
   with `Trying to pull...` instead of `{`, and Ignition fails with "invalid character T

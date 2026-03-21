@@ -24,7 +24,7 @@ Build a local SOC/Blue Team practice lab on `aurora` (Aurora OS, KVM/virt-manage
 > real SPAN port on a core switch. All three tiers feed Wazuh SIEM.
 
 ## Current Phase
-Phase 5 complete. Next: blog post write-up (rsyslog→Splunk), then Phase 6 (Windows DC) or Phase 9 (Kali).
+lefthand (ucore-hci) fully provisioned. Next: rsync VM images from aurora → lefthand, import + start VMs.
 
 ## Phases
 

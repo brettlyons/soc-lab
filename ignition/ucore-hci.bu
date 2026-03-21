@@ -270,25 +270,42 @@ storage:
 
           # --- 2. lab-net ---
           echo "[2/4] Defining lab-net virtual network (virbr-lab, 192.168.10.0/24)..."
-          virsh --connect qemu:///system net-define /etc/soc-lab/lab-net.xml
-          virsh --connect qemu:///system net-autostart lab-net
-          virsh --connect qemu:///system net-start lab-net
-          echo "      lab-net defined and started"
+          if virsh --connect qemu:///system net-info lab-net &>/dev/null; then
+              echo "      lab-net already exists, skipping define"
+          else
+              virsh --connect qemu:///system net-define /etc/soc-lab/lab-net.xml
+              echo "      lab-net defined"
+          fi
+          virsh --connect qemu:///system net-autostart lab-net || true
+          virsh --connect qemu:///system net-start lab-net 2>/dev/null \
+              && echo "      lab-net started" \
+              || echo "      lab-net already running"
 
           # --- 3. Reserve fw-router WAN IP ---
           echo "[3/4] Reserving fw-router DHCP address (MAC 52:54:00:ca:03:ea -> 192.168.122.10)..."
           virsh --connect qemu:///system net-update default add ip-dhcp-host \
               '<host mac="52:54:00:ca:03:ea" name="fw-router" ip="192.168.122.10"/>' \
-              --live --config
-          echo "      Reserved: 52:54:00:ca:03:ea -> 192.168.122.10"
+              --live --config 2>/dev/null \
+              && echo "      Reserved: 52:54:00:ca:03:ea -> 192.168.122.10" \
+              || echo "      DHCP reservation already exists, skipping"
 
           # --- 4. Storage pool ---
           echo "[4/4] Creating soc-lab libvirt storage pool..."
-          virsh --connect qemu:///system pool-define-as soc-lab dir \
-              --target /var/lib/libvirt/images/soc-lab
-          virsh --connect qemu:///system pool-autostart soc-lab
-          virsh --connect qemu:///system pool-start soc-lab
-          echo "      Storage pool: soc-lab -> /var/lib/libvirt/images/soc-lab"
+          if virsh --connect qemu:///system pool-info soc-lab &>/dev/null; then
+              echo "      soc-lab pool already exists, skipping define"
+          else
+              virsh --connect qemu:///system pool-define-as soc-lab dir \
+                  --target /var/lib/libvirt/images/soc-lab
+              echo "      soc-lab pool defined"
+          fi
+          virsh --connect qemu:///system pool-autostart soc-lab || true
+          virsh --connect qemu:///system pool-start soc-lab 2>/dev/null \
+              && echo "      soc-lab pool started" \
+              || echo "      soc-lab pool already active"
+
+          # Enable cockpit (Ignition can't do this — unit absent on vanilla CoreOS at first boot)
+          systemctl enable --now cockpit.service
+          echo "      cockpit.service enabled"
 
           touch /var/lib/soc-lab-first-boot.done
 
@@ -329,11 +346,8 @@ storage:
 passwd:
   users:
     - name: blyons
-      uid: 1000
       groups:
         - wheel
-        - libvirt
-        - kvm
       ssh_authorized_keys:
         - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICNyK0e6k0fOGbwGWi3Yg03Cg31OPgkIjA4ZKdc+rLIy blyons@fastmail.com"
 
@@ -392,16 +406,10 @@ systemd:
         [Install]
         WantedBy=multi-user.target
 
-    # libvirt monolithic daemon (works on ucore-hci; modular sockets are an alternative)
-    - name: libvirtd.service
-      enabled: true
-
-    # virtnetworkd needed for net-update and net-start commands
-    - name: virtnetworkd.service
-      enabled: true
-
-    # Cockpit web console — https://forge:9090
-    - name: cockpit.socket
+    # Cockpit web console — https://lefthand:9090
+    # ucore-hci uses cockpit.service (not cockpit.socket)
+    # libvirtd/virtnetworkd are handled automatically by ucore-hci presets
+    - name: cockpit.service
       enabled: true
 
     # -------------------------------------------------------------------------
@@ -416,8 +424,8 @@ systemd:
       contents: |
         [Unit]
         Description=SOC Lab — Add lab network routes to hypervisor
-        After=virtnetworkd.service
-        Wants=virtnetworkd.service
+        After=soc-lab-first-boot.service virtnetworkd.service
+        Wants=soc-lab-first-boot.service virtnetworkd.service
 
         [Service]
         Type=oneshot
@@ -440,8 +448,9 @@ systemd:
       contents: |
         [Unit]
         Description=SOC Lab — First boot libvirt network + storage pool setup
-        After=libvirtd.service virtnetworkd.service
-        Requires=libvirtd.service
+        After=virtqemud.service virtnetworkd.service
+        Wants=virtqemud.service virtnetworkd.service
+        ConditionPathExists=/usr/bin/virsh
         ConditionPathExists=!/var/lib/soc-lab-first-boot.done
 
         [Service]
@@ -465,7 +474,6 @@ systemd:
 
         [Timer]
         OnCalendar=*-*-* 21:00:00
-        Persistent=true
 
         [Install]
         WantedBy=timers.target

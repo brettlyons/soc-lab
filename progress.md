@@ -282,8 +282,38 @@
 
 **Status:** CoreOS installed, autorebase reboots in progress (3 boots to fully provisioned ucore-hci)
 
+## Session 17: 2026-03-21
+
+### lefthand — fully provisioned ucore-hci
+
+**Problem:** lefthand was stuck in emergency mode from a malformed ignition file (Session 16 crash).
+
+**Fix — self-installing ISO via `coreos-installer iso customize`:**
+- Previous approach (HTTP-served ign + manual SSH) replaced with a single self-installing ISO
+- Used `coreos-installer iso customize --dest-device /dev/nvme0n1 --dest-ignition ucore-hci.ign`
+- ISO verified: `iso ignition show` confirmed `dest.ign` + `installer.d/0000-customize.yaml` embedded correctly
+- Written to USB with `dd`, booted lefthand — fully unattended install + 2 autorebase reboots ✓
+
+**soc-lab-first-boot.service failed:**
+- Root cause: `set -euo pipefail` + `net-define` failing because lab-net already existed from prior attempt
+- Manual fix: ran remaining steps (DHCP reservation already existed too, cockpit enabled, sentinel touched)
+- Code fix: made script fully idempotent — each step checks existence before acting, uses `|| true` on autostart/start
+
+**Post-reboot verification:**
+- `soc-lab-first-boot`: skipped cleanly via `ConditionPathExists` sentinel ✓
+- `soc-lab-routes`: ran, both routes added (192.168.10.0/24, 192.168.40.0/24 via 192.168.122.10) ✓
+- Containers: cockpit-ws, suricata-internal, rsyslog-suricata all Up ✓
+- SELinux: all denials permissive — upstream policy gaps in ucore-hci, no action needed
+
+**Cockpit:** https://172.16.1.114:9090 — blyons / `pass soc-lab/lefthand-cockpit`
+
+**Gotchas:**
+- `coreos-installer iso customize` is the right tool for unattended installs — not `iso ignition embed`
+- `--dest-ignition <file>` embeds the ign for the installed OS; `--dest-device` triggers autoinstall
+- No `--dest-ignition-url` flag — for HTTP-hosted ign use `--installer-config` with YAML containing `ignition-url`
+- Always read the docs (`https://docs.fedoraproject.org/en-US/fedora-coreos/bare-metal/`) before building the approach
+
 **Next session:**
-- Verify lefthand booted into ucore-hci (SSH as blyons, check `rpm-ostree status`)
 - Copy fw-router SSH key: `scp ~/.ssh/fw-router-key lefthand:~/.ssh/fw-router-key`
 - Rsync VM images from aurora: `rsync -av /var/lib/libvirt/images/soc-lab/ lefthand:/var/lib/libvirt/images/soc-lab/`
 - Import and start VMs on lefthand
