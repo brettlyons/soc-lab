@@ -354,6 +354,25 @@
 
 **Next:** Decide whether aurora or lefthand is primary going forward; start Windows VMs on lefthand as needed.
 
+### Session 18 (continued): aurora workstation → lefthand server routing
+
+**Goal:** treat aurora as management workstation, lefthand as hypervisor — reach all lab VMs (192.168.10.0/24) from aurora directly.
+
+**Complication:** both hosts use 192.168.10.0/24. Aurora's soc-lab-routes.service adds 192.168.10.0/24 via 192.168.122.10 (aurora's own fw-router). That route conflicts with routing to lefthand's lab-net.
+
+**Routing fix on aurora:**
+- Deleted the duplicate /24 routes via aurora's fw-router
+- Added `192.168.10.60/32 via 192.168.122.10` (host route — kali still on aurora's lab-net)
+- Added `192.168.10.0/24 via 172.16.1.114` (lefthand LAN IP, for all other VMs)
+
+**Forwarding fix on lefthand — UNRESOLVED:**
+- Attempt 1: firewalld policy `aurora-to-lab` (ingress FedoraServer → egress libvirt, target ACCEPT) — created and active, did not fix
+- Attempt 2: added 172.16.1.147 (aurora) to trusted zone — did not fix
+- Symptom: lefthand (172.16.1.114) returns ICMP "Destination Port Unreachable" to aurora's pings destined for 192.168.10.10
+- lefthand itself can ping 192.168.10.10 fine (via 192.168.122.10 dev virbr0)
+- All nftables FORWARD chains have policy accept; suspect libvirt_network guest_input/guest_cross chains or return-path issue
+- **Next:** inspect `nft list chain ip libvirt_network guest_input` and `guest_cross`; check if return traffic from VMs can reach aurora (172.16.1.147) via fw-router → lefthand LAN
+
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
